@@ -42,6 +42,8 @@ function MainContent() {
     return () => clearInterval(interval);
   }, [globalHold, setGlobalHold]);
 
+  const [globalConfirmLoading, setGlobalConfirmLoading] = useState(false);
+
   const handleCancelGlobalHold = async () => {
     if (!globalHold) return;
     try {
@@ -56,14 +58,24 @@ function MainContent() {
     }
   };
 
-  const handleGoToCheckout = () => {
+  const handleGoToCheckout = async () => {
     if (!globalHold) return;
-    setActiveTab('dashboard');
-    setSelectedShow({
-      showId: globalHold.showId,
-      eventId: globalHold.eventId,
-      venueName: globalHold.venueName,
-    });
+    setGlobalConfirmLoading(true);
+    try {
+      await axios.post(`/api/shows/${globalHold.showId}/checkout`, {
+        seatIds: globalHold.seatIds,
+      });
+      setGlobalHold(null);
+      setSelectedShow(null);
+      setActiveTab('bookings');
+      alert('Booking confirmed successfully! You can view your ticket and QR code below.');
+    } catch (err: any) {
+      alert(err.response?.data?.error?.message || 'Failed to confirm booking. Your hold may have expired.');
+      setGlobalHold(null);
+      setSelectedShow(null);
+    } finally {
+      setGlobalConfirmLoading(false);
+    }
   };
 
   const formatCountdown = (secs: number) => {
@@ -292,15 +304,17 @@ function MainContent() {
                 <div className="flex gap-2">
                   <button
                     onClick={handleCancelGlobalHold}
-                    className="text-xs font-semibold px-2 py-1 text-amber-700 hover:bg-amber-100 rounded border border-amber-200 transition-colors"
+                    disabled={globalConfirmLoading}
+                    className="text-xs font-semibold px-2 py-1 text-amber-700 hover:bg-amber-100 rounded border border-amber-200 transition-colors disabled:opacity-50"
                   >
                     Cancel Hold
                   </button>
                   <button
                     onClick={handleGoToCheckout}
-                    className="text-xs font-semibold px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded shadow-sm transition-colors"
+                    disabled={globalConfirmLoading}
+                    className="text-xs font-semibold px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded shadow-sm transition-colors disabled:opacity-50"
                   >
-                    Confirm Booking
+                    {globalConfirmLoading ? 'Confirming...' : 'Confirm Booking'}
                   </button>
                 </div>
               </div>
