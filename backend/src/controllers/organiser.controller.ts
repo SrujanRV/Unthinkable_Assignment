@@ -1,5 +1,7 @@
 import { Response } from 'express';
 import { prisma } from '../services/db.service';
+import { redis } from '../services/redis.service';
+import { sendEventCancellationEmail } from '../services/email.service';
 import { z } from 'zod';
 import { AuthenticatedRequest } from '../middlewares/auth.middleware';
 import { EventType } from '@prisma/client';
@@ -331,5 +333,133 @@ export const getDashboardMetrics = async (req: AuthenticatedRequest, res: Respon
   } catch (error) {
     console.error('[Organiser Dashboard] Metrics error:', error);
     res.status(500).json({ error: { message: 'Internal server error retrieving metrics', status: 500 } });
+  }
+};
+
+export const cancelEvent = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const { eventId } = req.params;
+
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: { message: 'Unauthorized', status: 401 } });
+      return;
+    }
+
+    // 1. Fetch event with shows, seats, confirmed bookings, and waitlist
+    const event = await prisma.event.findFirst({
+      where: { id: eventId, organiserId: req.user.id },
+      include: {
+        shows: {
+          include: {
+            showSeats: {
+              include: { seat: { include: { category: true } } },
+            },
+            bookings: {
+              where: { status: 'CONFIRMED' },
+              include: {
+                user: { select: { email: true } },
+                showSeats: { include: { seat: true } },
+              },
+            },
+            waitlistEntries: {
+              where: { status: { in: ['WAITING', 'OFFERED'] } },
+            },
+          },
+        },
+      },
+    });
+
+    if (!event) {
+      res.status(404).json({ error: { message: 'Event not found or access denied', status: 404 } });
+      return;
+    }
+
+    if (event.isCancelled) {
+      res.status(400).json({ error: { message: 'Event is already cancelled', status: 400 } });
+      return;
+    }
+
+    // 2. Perform cancellation inside a database transaction
+    await prisma.$transaction(async (tx) => {
+      // A. Mark event as cancelled
+      await tx.event.update({
+        where: { id: eventId },
+        data: { isCancelled: true },
+      });
+
+      // B. Process each show
+      for (const show of event.shows) {
+        // I. Release show seats in Postgres
+        await tx.showSeat.updateMany({
+          where: { showId: show.id },
+          data: {
+            status: 'AVAILABLE',
+            heldByUserId: null,
+            heldUntil: null,
+            bookingId: null,
+          },
+        });
+
+        // II. Cancel all waitlist entries in Postgres
+        await tx.waitlistEntry.updateMany({
+          where: { showId: show.id },
+          data: { status: 'EXPIRED' },
+        });
+
+        // III. Cancel all confirmed bookings for this show
+        await tx.booking.updateMany({
+          where: { showId: show.id, status: 'CONFIRMED' },
+          data: {
+            status: 'CANCELLED',
+            cancellationReason: 'Event cancelled by organiser',
+          },
+        });
+
+        // IV. Release locks in Redis for all show seats
+        const redisKeys = show.showSeats.map((ss) => `show:${show.id}:seat:${ss.seatId}:hold`);
+        if (redisKeys.length > 0) {
+          await redis.del(...redisKeys);
+        }
+      }
+    });
+
+    // 3. Dispatch emails & Socket.io broadcasts
+    const io = req.app.get('io');
+
+    for (const show of event.shows) {
+      // A. Send cancellation emails to all affected booking owners
+      for (const booking of show.bookings) {
+        const seatLabels = booking.showSeats.map(
+          (ss) => `${ss.seat.row}${ss.seat.number}`
+        );
+        sendEventCancellationEmail({
+          to: booking.user.email,
+          bookingReference: booking.bookingReference,
+          eventTitle: event.title,
+          startTime: show.startTime.toISOString(),
+          seats: seatLabels,
+          refundAmount: Number(booking.totalAmount),
+        }).catch((err) => {
+          console.error(`Failed to send cancellation email to ${booking.user.email}:`, err);
+        });
+      }
+
+      // B. Broadcast AVAILABLE status for every seat via Socket.io
+      if (io) {
+        show.showSeats.forEach((ss) => {
+          io.to(`show:${show.id}`).emit('seatStatusChanged', {
+            seatId: ss.seatId,
+            status: 'AVAILABLE',
+            heldByUserId: null,
+            heldUntil: null,
+          });
+        });
+      }
+    }
+
+    res.status(200).json({ message: 'Event and all related bookings cancelled successfully' });
+  } catch (error) {
+    console.error('[Organiser] Cancel event error:', error);
+    res.status(500).json({ error: { message: 'Internal server error cancelling event', status: 500 } });
   }
 };

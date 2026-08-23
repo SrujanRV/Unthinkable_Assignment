@@ -13,6 +13,7 @@ interface Booking {
   id: string;
   bookingReference: string;
   status: 'CONFIRMED' | 'CANCELLED';
+  cancellationReason?: string | null;
   totalAmount: string;
   createdAt: string;
   show: {
@@ -153,6 +154,22 @@ export default function MyBookings() {
                         <span>Seats: <strong className="text-gray-750 font-bold">{seatLabels}</strong></span>
                       </div>
                     </div>
+
+                    {booking.status === 'CANCELLED' && (
+                      <div className={`flex items-start gap-2 text-xs px-3 py-2 rounded-lg border ${
+                        booking.cancellationReason === 'Event cancelled by organiser'
+                          ? 'bg-red-50 border-red-200 text-red-700'
+                          : 'bg-gray-50 border-gray-200 text-gray-600'
+                      }`}>
+                        <XCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                        <span>
+                          <strong>Reason: </strong>
+                          {booking.cancellationReason === 'Event cancelled by organiser'
+                            ? 'This event was cancelled by the organiser.'
+                            : 'Cancelled by you.'}
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-4 border-t md:border-t-0 pt-4 md:pt-0 self-stretch md:self-auto justify-between md:justify-end">

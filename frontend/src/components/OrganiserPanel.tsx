@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
-import { Plus, Edit3, Calendar, MapPin, Layers, DollarSign, Save, Loader, BarChart3, Users, Landmark } from 'lucide-react';
+import { Plus, Edit3, Calendar, MapPin, Layers, DollarSign, Save, Loader, BarChart3, Users, Landmark, AlertTriangle, XCircle } from 'lucide-react';
 
 interface SeatCategory {
   id: string;
@@ -43,6 +43,7 @@ interface OrganiserEvent {
   title: string;
   description: string;
   type: 'MOVIE' | 'CONCERT';
+  isCancelled: boolean;
   shows: Show[];
 }
 
@@ -70,6 +71,10 @@ export default function OrganiserPanel() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  // Event Cancellation State
+  const [cancelConfirmEventId, setCancelConfirmEventId] = useState<string | null>(null);
+  const [cancelLoading, setCancelLoading] = useState(false);
 
   const fetchMyEvents = async () => {
     try {
@@ -235,6 +240,22 @@ export default function OrganiserPanel() {
     }
   };
 
+  const handleCancelEvent = async (eventId: string) => {
+    setCancelLoading(true);
+    setError(null);
+    try {
+      await axios.post(`/api/organiser/events/${eventId}/cancel`);
+      setSuccess('Event cancelled. All bookings have been cancelled and customers notified.');
+      setCancelConfirmEventId(null);
+      fetchMyEvents();
+    } catch (err: any) {
+      setError(err.response?.data?.error?.message || 'Failed to cancel event');
+      setCancelConfirmEventId(null);
+    } finally {
+      setCancelLoading(false);
+    }
+  };
+
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
       {/* Header Banner */}
@@ -306,14 +327,24 @@ export default function OrganiserPanel() {
                 events.map((event) => (
                   <div
                     key={event.id}
-                    className="p-5 border border-gray-250 rounded-xl hover:border-gray-350 hover:shadow-sm transition-all flex flex-col md:flex-row justify-between gap-4"
+                    className={`p-5 border rounded-xl transition-all flex flex-col md:flex-row justify-between gap-4 ${
+                      event.isCancelled
+                        ? 'border-red-200 bg-red-50/40 opacity-70'
+                        : 'border-gray-250 hover:border-gray-350 hover:shadow-sm'
+                    }`}
                   >
                     <div className="space-y-3 flex-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-lg font-extrabold text-gray-850">{event.title}</span>
                         <span className="text-[10px] bg-indigo-50 text-indigo-700 font-bold px-1.5 py-0.5 rounded uppercase border border-indigo-200">
                           {event.type}
                         </span>
+                        {event.isCancelled && (
+                          <span className="text-[10px] bg-red-100 text-red-700 font-bold px-1.5 py-0.5 rounded uppercase border border-red-300 flex items-center gap-1">
+                            <XCircle className="w-3 h-3" />
+                            Cancelled
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs text-gray-500 line-clamp-2 max-w-2xl">
                         {event.description}
@@ -350,13 +381,45 @@ export default function OrganiserPanel() {
                           </span>
                         ))}
                       </div>
-                      <button
-                        onClick={() => handleEditClick(event)}
-                        className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-50 border border-indigo-200 rounded-lg transition-colors focus:outline-none"
-                      >
-                        <Edit3 className="w-3.5 h-3.5" />
-                        Edit Details
-                      </button>
+
+                      {!event.isCancelled && (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleEditClick(event)}
+                            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-50 border border-indigo-200 rounded-lg transition-colors focus:outline-none"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                            Edit Details
+                          </button>
+                          {cancelConfirmEventId === event.id ? (
+                            <div className="flex items-center gap-1.5 bg-red-50 border border-red-200 rounded-lg px-3 py-1.5">
+                              <AlertTriangle className="w-3.5 h-3.5 text-red-600 flex-shrink-0" />
+                              <span className="text-xs text-red-700 font-semibold">Confirm cancel?</span>
+                              <button
+                                onClick={() => handleCancelEvent(event.id)}
+                                disabled={cancelLoading}
+                                className="text-xs font-bold text-white bg-red-600 hover:bg-red-700 px-2 py-0.5 rounded transition-colors disabled:opacity-50"
+                              >
+                                {cancelLoading ? 'Cancelling...' : 'Yes, Cancel'}
+                              </button>
+                              <button
+                                onClick={() => setCancelConfirmEventId(null)}
+                                className="text-xs font-semibold text-gray-500 hover:text-gray-700"
+                              >
+                                No
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => { setError(null); setSuccess(null); setCancelConfirmEventId(event.id); }}
+                              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-red-700 hover:bg-red-50 border border-red-200 rounded-lg transition-colors focus:outline-none"
+                            >
+                              <XCircle className="w-3.5 h-3.5" />
+                              Cancel Event
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))

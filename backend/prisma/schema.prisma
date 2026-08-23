@@ -94,6 +94,7 @@ model Event {
   type        EventType
   organiserId String
   organiser   User      @relation("OrganiserEvents", fields: [organiserId], references: [id], onDelete: Cascade)
+  isCancelled Boolean   @default(false)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   shows       Show[]
@@ -150,6 +151,7 @@ model Booking {
   showId           String
   show             Show          @relation(fields: [showId], references: [id], onDelete: Cascade)
   status           BookingStatus @default(PENDING)
+  cancellationReason String?
   totalAmount      Decimal       @db.Decimal(10, 2)
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt

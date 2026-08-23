@@ -21,6 +21,7 @@ export const listVenues = async (req: Request, res: Response): Promise<void> => 
 export const listEvents = async (req: Request, res: Response): Promise<void> => {
   try {
     const events = await prisma.event.findMany({
+      where: { isCancelled: false },
       include: {
         shows: {
           include: {
