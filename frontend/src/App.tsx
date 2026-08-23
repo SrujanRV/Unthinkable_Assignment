@@ -6,13 +6,14 @@ import HealthDashboard from './components/HealthDashboard';
 import AdminPanel from './components/AdminPanel';
 import OrganiserPanel from './components/OrganiserPanel';
 import BrowseEvents from './components/BrowseEvents';
-import { LogOut, User, Activity, Shield, LayoutGrid, Music } from 'lucide-react';
+import MyBookings from './components/MyBookings';
+import { LogOut, User, Activity, Shield, LayoutGrid, Music, Ticket } from 'lucide-react';
 
 function MainContent() {
   const { isAuthenticated, user, logout, loading } = useAuth();
   const [isLoginView, setIsLoginView] = useState(true);
   const [showHealth, setShowHealth] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'admin' | 'organiser' | 'health'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'admin' | 'organiser' | 'health' | 'bookings'>('dashboard');
 
   const isAdmin = user?.role === 'ADMIN';
   const isOrganiser = user?.role === 'ORGANISER';
@@ -129,6 +130,17 @@ function MainContent() {
                 Dashboard
               </button>
               <button
+                onClick={() => setActiveTab('bookings')}
+                className={`flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg transition-colors focus:outline-none ${
+                  activeTab === 'bookings'
+                    ? 'bg-indigo-50 text-indigo-700'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                }`}
+              >
+                <Ticket className="w-4 h-4" />
+                My Bookings
+              </button>
+              <button
                 onClick={() => setActiveTab('health')}
                 className={`flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg transition-colors focus:outline-none ${
                   activeTab === 'health'
@@ -192,6 +204,12 @@ function MainContent() {
               </p>
             </div>
             <BrowseEvents />
+          </div>
+        )}
+
+        {activeTab === 'bookings' && (
+          <div className="space-y-6">
+            <MyBookings />
           </div>
         )}
 

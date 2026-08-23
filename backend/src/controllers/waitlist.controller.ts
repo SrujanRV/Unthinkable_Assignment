@@ -258,3 +258,37 @@ export const cancelBooking = async (req: AuthenticatedRequest, res: Response): P
     res.status(500).json({ error: { message: 'Internal server error cancelling booking', status: 500 } });
   }
 };
+
+export const listMyBookings = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  if (!req.user) {
+    res.status(401).json({ error: { message: 'Unauthorized', status: 401 } });
+    return;
+  }
+
+  const userId = req.user.id;
+
+  try {
+    const bookings = await prisma.booking.findMany({
+      where: { userId },
+      include: {
+        show: {
+          include: {
+            event: { select: { title: true, type: true } },
+            venue: { select: { name: true, location: true } },
+          },
+        },
+        showSeats: {
+          include: {
+            seat: { select: { row: true, number: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.status(200).json({ bookings });
+  } catch (error) {
+    console.error('[Booking] List error:', error);
+    res.status(500).json({ error: { message: 'Internal server error listing bookings', status: 500 } });
+  }
+};
