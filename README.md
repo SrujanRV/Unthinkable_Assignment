@@ -94,3 +94,14 @@ To run backend test suites (focusing on concurrency safe seat-holds and waitlist
 npm run test
 ```
 **Vitest** handles fast in-memory execution of tests using mock dependencies.
+
+---
+
+## 🔑 Authentication Design Decisions
+
+For this application, we implemented a **stateless, access-token-only JWT authentication flow** with a 24-hour expiration window.
+
+### Why we chose this design:
+1. **Stateless Scalability**: The primary focus of a high-concurrency ticket platform is throughput and minimizing database overhead. Standard refresh token flows require token verification DB queries, tables, or blacklists. Keeping JWTs stateless allows our Express middleware to quickly authorize users by unpacking the cryptographic signature in memory without adding database read bottlenecks.
+2. **Simplified Test Harnesses**: In integration testing and concurrency stress tests, token expirations can complicate assertions. A 24-hour access token window keeps tokens stable for the lifecycle of our local developer sessions and test suites.
+3. **Roles in Claims**: The user's role (`CUSTOMER`, `ORGANISER`, or `ADMIN`) is embedded inside the JWT token claims. The backend can instantly restrict or grant route access using role-based claims in the request pipeline.
