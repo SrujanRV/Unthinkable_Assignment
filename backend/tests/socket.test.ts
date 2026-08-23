@@ -7,6 +7,23 @@ import { redis } from '../src/services/redis.service';
 const API_URL = 'http://localhost:5000/api';
 const SOCKET_URL = 'http://localhost:5000';
 
+// Helper to prevent Axios error serialization issues in Vitest workers
+async function safePost(url: string, data: any, headers?: any) {
+  try {
+    return await axios.post(url, data, headers ? { headers } : undefined);
+  } catch (err: any) {
+    throw new Error(err.response?.data?.error?.message || err.message);
+  }
+}
+
+async function safeGet(url: string, headers?: any) {
+  try {
+    return await axios.get(url, headers ? { headers } : undefined);
+  } catch (err: any) {
+    throw new Error(err.response?.data?.error?.message || err.message);
+  }
+}
+
 describe('Socket.io Real-Time Broadcast Integration Tests', () => {
   let token: string;
   let userId: string;
@@ -17,7 +34,7 @@ describe('Socket.io Real-Time Broadcast Integration Tests', () => {
   beforeAll(async () => {
     // 1. Create a user
     const email = `socket_test_${Date.now()}@test.com`;
-    const regRes = await axios.post(`${API_URL}/auth/register`, {
+    const regRes = await safePost(`${API_URL}/auth/register`, {
       email,
       password: 'password123',
       role: 'CUSTOMER',
@@ -26,19 +43,15 @@ describe('Socket.io Real-Time Broadcast Integration Tests', () => {
     userId = regRes.data.user.id;
 
     // 2. Fetch an active show and an available seat
-    const eventsRes = await axios.get(`${API_URL}/events`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const eventsRes = await safeGet(`${API_URL}/events`, { Authorization: `Bearer ${token}` });
     const events = eventsRes.data.events;
     expect(events.length).toBeGreaterThan(0);
     showId = events[0].shows[0].id;
 
-    const seatsRes = await axios.get(`${API_URL}/shows/${showId}/seats`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const seatsRes = await safeGet(`${API_URL}/shows/${showId}/seats`, { Authorization: `Bearer ${token}` });
     const availableSeats = seatsRes.data.seats.filter((s: any) => s.status === 'AVAILABLE');
     expect(availableSeats.length).toBeGreaterThan(0);
-    seatId = availableSeats[0].seatId;
+    seatId = availableSeats[availableSeats.length - 1].seatId;
 
     // Clear any leftover hold/lock
     await redis.del(`show:${showId}:seat:${seatId}:hold`);
@@ -95,16 +108,16 @@ describe('Socket.io Real-Time Broadcast Integration Tests', () => {
         clientSocket.emit('joinShow', showId);
         resolve();
       });
-      clientSocket.on('connect_error', (err) => reject(err));
+      clientSocket.on('connect_error', (err) => reject(new Error(err.message)));
     });
 
     // 2. Transition 1: Hold the seat (AVAILABLE -> HELD)
     const holdPromise = waitForEvent(clientSocket, 'seatStatusChanged');
     
-    await axios.post(
+    await safePost(
       `${API_URL}/shows/${showId}/hold`,
       { seatIds: [seatId] },
-      { headers: { Authorization: `Bearer ${token}` } }
+      { Authorization: `Bearer ${token}` }
     );
 
     const holdData = await holdPromise;
@@ -115,10 +128,10 @@ describe('Socket.io Real-Time Broadcast Integration Tests', () => {
     // 3. Transition 2: Release the held seat (HELD -> AVAILABLE)
     const releasePromise = waitForEvent(clientSocket, 'seatStatusChanged');
 
-    await axios.post(
+    await safePost(
       `${API_URL}/shows/${showId}/release`,
       { seatIds: [seatId] },
-      { headers: { Authorization: `Bearer ${token}` } }
+      { Authorization: `Bearer ${token}` }
     );
 
     const releaseData = await releasePromise;
@@ -128,18 +141,18 @@ describe('Socket.io Real-Time Broadcast Integration Tests', () => {
 
     // 4. Transition 3: Hold again, then Book/Checkout (HELD -> BOOKED)
     const holdPromise2 = waitForEvent(clientSocket, 'seatStatusChanged');
-    await axios.post(
+    await safePost(
       `${API_URL}/shows/${showId}/hold`,
       { seatIds: [seatId] },
-      { headers: { Authorization: `Bearer ${token}` } }
+      { Authorization: `Bearer ${token}` }
     );
     await holdPromise2;
 
     const bookPromise = waitForEvent(clientSocket, 'seatStatusChanged');
-    await axios.post(
+    await safePost(
       `${API_URL}/shows/${showId}/checkout`,
       { seatIds: [seatId] },
-      { headers: { Authorization: `Bearer ${token}` } }
+      { Authorization: `Bearer ${token}` }
     );
 
     const bookData = await bookPromise;

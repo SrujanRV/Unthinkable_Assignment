@@ -7,15 +7,70 @@ import AdminPanel from './components/AdminPanel';
 import OrganiserPanel from './components/OrganiserPanel';
 import BrowseEvents from './components/BrowseEvents';
 import MyBookings from './components/MyBookings';
-import { LogOut, User, Activity, Shield, LayoutGrid, Music, Ticket } from 'lucide-react';
+import { LogOut, User, Activity, Shield, LayoutGrid, Music, Ticket, Clock } from 'lucide-react';
+import axios from 'axios';
 
 function MainContent() {
-  const { isAuthenticated, user, logout, loading } = useAuth();
+  const { isAuthenticated, user, logout, loading, globalHold, setGlobalHold, setSelectedShow } = useAuth();
   const [isLoginView, setIsLoginView] = useState(true);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'admin' | 'organiser' | 'health' | 'bookings'>('dashboard');
 
   const isAdmin = user?.role === 'ADMIN';
   const isOrganiser = user?.role === 'ORGANISER';
+
+  const [globalCountdown, setGlobalCountdown] = useState<number>(0);
+
+  useEffect(() => {
+    if (!globalHold) {
+      setGlobalCountdown(0);
+      return;
+    }
+
+    const tick = () => {
+      const remaining = Math.max(
+        0,
+        Math.floor((new Date(globalHold.heldUntil).getTime() - Date.now()) / 1000),
+      );
+      setGlobalCountdown(remaining);
+      if (remaining === 0) {
+        setGlobalHold(null);
+      }
+    };
+
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [globalHold, setGlobalHold]);
+
+  const handleCancelGlobalHold = async () => {
+    if (!globalHold) return;
+    try {
+      await axios.post(`/api/shows/${globalHold.showId}/release`, {
+        seatIds: globalHold.seatIds,
+      });
+    } catch (e) {
+      console.error('Failed to release held seats:', e);
+    } finally {
+      setGlobalHold(null);
+      setSelectedShow(null);
+    }
+  };
+
+  const handleGoToCheckout = () => {
+    if (!globalHold) return;
+    setActiveTab('dashboard');
+    setSelectedShow({
+      showId: globalHold.showId,
+      eventId: globalHold.eventId,
+      venueName: globalHold.venueName,
+    });
+  };
+
+  const formatCountdown = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
 
   // Set default tab on authentication or user change
   useEffect(() => {
@@ -219,6 +274,40 @@ function MainContent() {
           </div>
         )}
       </main>
+
+      {/* Global Hold Pop-up / Banner */}
+      {globalHold && (
+        <div className="fixed bottom-4 right-4 z-50 max-w-sm w-full bg-amber-50 border border-amber-300 rounded-xl shadow-lg p-4">
+          <div className="flex items-start gap-3">
+            <Clock className="w-5 h-5 text-amber-600 mt-0.5 animate-pulse flex-shrink-0" />
+            <div className="flex-1">
+              <h4 className="font-bold text-amber-900 text-sm">Waiting Confirmation</h4>
+              <p className="text-xs text-amber-700 mt-1">
+                You held seats <strong className="text-amber-900 font-mono">{globalHold.seatIds.join(', ')}</strong>. Complete booking before it expires.
+              </p>
+              <div className="mt-3 flex items-center justify-between gap-2">
+                <span className="text-xs font-mono font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded border border-amber-250">
+                  {formatCountdown(globalCountdown)}
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleCancelGlobalHold}
+                    className="text-xs font-semibold px-2 py-1 text-amber-700 hover:bg-amber-100 rounded border border-amber-200 transition-colors"
+                  >
+                    Cancel Hold
+                  </button>
+                  <button
+                    onClick={handleGoToCheckout}
+                    className="text-xs font-semibold px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded shadow-sm transition-colors"
+                  >
+                    Confirm Booking
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

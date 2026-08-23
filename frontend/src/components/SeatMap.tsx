@@ -40,8 +40,8 @@ type View = 'map' | 'checkout' | 'success';
 
 const BACKEND_URL = 'http://localhost:5000';
 
-export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
-  const { user, token } = useAuth();
+export default function SeatMap({ showId, eventId, venueName, onBack }: SeatMapProps) {
+  const { user, token, setGlobalHold } = useAuth();
 
   const [seats, setSeats] = useState<Seat[]>([]);
   const [showPrices, setShowPrices] = useState<{ [catId: string]: number }>({});
@@ -126,10 +126,6 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
     });
 
     return () => {
-      const held = heldSeatIdsRef.current;
-      if (held.length > 0) {
-        axios.post(`/api/shows/${showId}/release`, { seatIds: held }).catch(() => {});
-      }
       socket.emit('leaveShow', showId);
       socket.disconnect();
     };
@@ -141,13 +137,14 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
     if (held.length > 0) {
       await axios.post(`/api/shows/${showId}/release`, { seatIds: held }).catch(() => {});
     }
+    setGlobalHold(null);
     setHeldSeatIds([]);
     setHeldUntil(null);
     setSelectedSeatIds([]);
     setView('map');
     setError('Your seat hold expired. The seats have been released — please reselect.');
     fetchSeatMap();
-  }, [showId, fetchSeatMap]);
+  }, [showId, fetchSeatMap, setGlobalHold]);
 
   useEffect(() => {
     if (!heldUntil) { setCountdown(0); return; }
@@ -189,6 +186,13 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
         { seatIds: selectedSeatIds },
       );
       // Every seat in the batch was atomically locked on the server
+      setGlobalHold({
+        showId,
+        eventId,
+        venueName,
+        seatIds: selectedSeatIds,
+        heldUntil: res.data.heldUntil,
+      });
       setHeldSeatIds(selectedSeatIds);
       setHeldUntil(res.data.heldUntil);
       setSelectedSeatIds([]);
@@ -217,6 +221,7 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
     setLoading(true);
     try {
       await axios.post(`/api/shows/${showId}/release`, { seatIds: heldSeatIds });
+      setGlobalHold(null);
       setHeldSeatIds([]);
       setHeldUntil(null);
       setView('map');
@@ -238,6 +243,7 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
         `/api/shows/${showId}/checkout`,
         { seatIds: heldSeatIds },
       );
+      setGlobalHold(null);
       setBookingResult(res.data.booking);
       setHeldSeatIds([]);
       setHeldUntil(null);
@@ -246,6 +252,7 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
       const msg = err.response?.data?.error?.message || 'Checkout failed. Your hold may have expired.';
       setError(msg);
       if (err.response?.status === 400) {
+        setGlobalHold(null);
         setHeldSeatIds([]);
         setHeldUntil(null);
         setView('map');

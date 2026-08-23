@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
 import { Search, Calendar, MapPin, ArrowRight, Loader } from 'lucide-react';
 import SeatMap from './SeatMap';
@@ -46,12 +47,7 @@ export default function BrowseEvents() {
   const [venueFilter, setVenueFilter] = useState<string>('ALL');
   const [dateFilter, setDateFilter] = useState<string>('');
 
-  // Selected Showtime state for loading seat map
-  const [selectedShow, setSelectedShow] = useState<{
-    showId: string;
-    eventId: string;
-    venueName: string;
-  } | null>(null);
+  const { selectedShow, setSelectedShow } = useAuth();
 
   const fetchEventsAndVenues = async () => {
     setLoading(true);

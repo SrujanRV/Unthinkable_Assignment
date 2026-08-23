@@ -18,6 +18,30 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, role: UserRole) => Promise<void>;
   logout: () => void;
+  globalHold: {
+    showId: string;
+    eventId: string;
+    venueName: string;
+    seatIds: string[];
+    heldUntil: string;
+  } | null;
+  setGlobalHold: (hold: {
+    showId: string;
+    eventId: string;
+    venueName: string;
+    seatIds: string[];
+    heldUntil: string;
+  } | null) => void;
+  selectedShow: {
+    showId: string;
+    eventId: string;
+    venueName: string;
+  } | null;
+  setSelectedShow: (show: {
+    showId: string;
+    eventId: string;
+    venueName: string;
+  } | null) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -26,6 +50,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+
+  const [globalHold, setGlobalHoldState] = useState<{
+    showId: string;
+    eventId: string;
+    venueName: string;
+    seatIds: string[];
+    heldUntil: string;
+  } | null>(() => {
+    const saved = localStorage.getItem('activeHold');
+    if (saved) {
+      try {
+        const hold = JSON.parse(saved);
+        if (new Date(hold.heldUntil) > new Date()) {
+          return hold;
+        }
+      } catch (e) {}
+    }
+    return null;
+  });
+
+  const setGlobalHold = (hold: any) => {
+    if (hold) {
+      localStorage.setItem('activeHold', JSON.stringify(hold));
+    } else {
+      localStorage.removeItem('activeHold');
+    }
+    setGlobalHoldState(hold);
+  };
+
+  const [selectedShow, setSelectedShow] = useState<{
+    showId: string;
+    eventId: string;
+    venueName: string;
+  } | null>(null);
 
   // Set default auth header for Axios
   if (token) {
@@ -93,9 +151,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('activeHold');
     delete axios.defaults.headers.common['Authorization'];
     setToken(null);
     setUser(null);
+    setGlobalHoldState(null);
+    setSelectedShow(null);
   };
 
   return (
@@ -108,6 +169,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login,
         register,
         logout,
+        globalHold,
+        setGlobalHold,
+        selectedShow,
+        setSelectedShow,
       }}
     >
       {children}
