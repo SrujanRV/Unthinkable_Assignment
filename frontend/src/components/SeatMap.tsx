@@ -109,7 +109,7 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
     const socket = io(BACKEND_URL, { auth: { token } });
     socketRef.current = socket;
     socket.on('connect', () => socket.emit('joinShow', showId));
-    socket.on('seatStatusUpdate', (data: {
+    socket.on('seatStatusChanged', (data: {
       seatId: string; status: 'AVAILABLE' | 'HELD' | 'BOOKED';
       heldByUserId: string | null; heldUntil: string | null;
     }) => {

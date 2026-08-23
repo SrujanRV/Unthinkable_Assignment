@@ -135,7 +135,7 @@ export const startHoldSweep = (io: Server): void => {
               await redis.del(lockKey);
 
               // Broadcast release to Socket.io
-              io.to(`show:${entry.showId}`).emit('seatStatusUpdate', {
+              io.to(`show:${entry.showId}`).emit('seatStatusChanged', {
                 seatId: showSeat.seatId,
                 status: 'AVAILABLE',
                 heldByUserId: null,
@@ -235,7 +235,7 @@ export const startHoldSweep = (io: Server): void => {
               });
 
               // Broadcast live seat status update (still HELD, but new holder)
-              io.to(`show:${ss.showId}`).emit('seatStatusUpdate', {
+              io.to(`show:${ss.showId}`).emit('seatStatusChanged', {
                 seatId: ss.seatId,
                 status: 'HELD',
                 heldByUserId: nextInQueue.userId,
@@ -254,7 +254,7 @@ export const startHoldSweep = (io: Server): void => {
             });
 
             // Broadcast AVAILABLE update to active socket room clients
-            io.to(`show:${ss.showId}`).emit('seatStatusUpdate', {
+            io.to(`show:${ss.showId}`).emit('seatStatusChanged', {
               seatId: ss.seatId,
               status: 'AVAILABLE',
               heldByUserId: null,

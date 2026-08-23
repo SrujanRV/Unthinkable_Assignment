@@ -219,7 +219,7 @@ export const cancelBooking = async (req: AuthenticatedRequest, res: Response): P
           // Broadcast HELD status to active socket room clients
           const io = req.app.get('io');
           if (io) {
-            io.to(`show:${booking.showId}`).emit('seatStatusUpdate', {
+            io.to(`show:${booking.showId}`).emit('seatStatusChanged', {
               seatId: showSeat.seatId,
               status: 'HELD',
               heldByUserId: nextInQueue.userId,
@@ -241,7 +241,7 @@ export const cancelBooking = async (req: AuthenticatedRequest, res: Response): P
           // Broadcast AVAILABLE status via Socket.io
           const io = req.app.get('io');
           if (io) {
-            io.to(`show:${booking.showId}`).emit('seatStatusUpdate', {
+            io.to(`show:${booking.showId}`).emit('seatStatusChanged', {
               seatId: showSeat.seatId,
               status: 'AVAILABLE',
               heldByUserId: null,

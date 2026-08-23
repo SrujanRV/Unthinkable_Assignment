@@ -232,7 +232,7 @@ export const holdSeats = async (req: AuthenticatedRequest, res: Response): Promi
     const io = req.app.get('io');
     if (io) {
       seatIds.forEach((seatId) => {
-        io.to(`show:${showId}`).emit('seatStatusUpdate', {
+        io.to(`show:${showId}`).emit('seatStatusChanged', {
           seatId,
           status: 'HELD',
           heldByUserId: userId,
@@ -310,7 +310,7 @@ export const releaseSeats = async (req: AuthenticatedRequest, res: Response): Pr
       const io = req.app.get('io');
       if (io) {
         seatsToRelease.forEach((seatId) => {
-          io.to(`show:${showId}`).emit('seatStatusUpdate', {
+          io.to(`show:${showId}`).emit('seatStatusChanged', {
             seatId,
             status: 'AVAILABLE',
             heldByUserId: null,
@@ -474,7 +474,7 @@ export const checkoutSeats = async (req: AuthenticatedRequest, res: Response): P
     const io = req.app.get('io');
     if (io) {
       seatIds.forEach((seatId) => {
-        io.to(`show:${showId}`).emit('seatStatusUpdate', {
+        io.to(`show:${showId}`).emit('seatStatusChanged', {
           seatId,
           status: 'BOOKED',
           heldByUserId: null,
