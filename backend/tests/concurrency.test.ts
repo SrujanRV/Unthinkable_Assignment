@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import axios from 'axios';
+import { prisma } from '../src/services/db.service';
+import { redis } from '../src/services/redis.service';
 
 const API_URL = 'http://localhost:5000/api';
 
@@ -49,6 +51,17 @@ describe('Seat Hold Concurrency Integration Test', () => {
     const availableSeats = seatsRes.data.seats.filter((s: any) => s.status === 'AVAILABLE');
     expect(availableSeats.length).toBeGreaterThan(0);
     seatId = availableSeats[0].seatId;
+
+    // Explicitly delete any stale Redis locks and clear PostgreSQL HELD status to isolate this test!
+    await redis.del(`show:${showId}:seat:${seatId}:hold`);
+    await prisma.showSeat.update({
+      where: { showId_seatId: { showId, seatId } },
+      data: {
+        status: 'AVAILABLE',
+        heldByUserId: null,
+        heldUntil: null,
+      },
+    });
   });
 
   it('should allow exactly one concurrent hold request to succeed and reject the other', async () => {
