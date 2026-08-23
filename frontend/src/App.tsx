@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import LoginPage from './components/LoginPage';
 import RegisterPage from './components/RegisterPage';
@@ -18,14 +18,18 @@ function MainContent() {
   const isAdmin = user?.role === 'ADMIN';
   const isOrganiser = user?.role === 'ORGANISER';
 
-  // Set default tab on authentication
-  useState(() => {
-    if (user?.role === 'ADMIN') {
-      setActiveTab('admin');
-    } else if (user?.role === 'ORGANISER') {
-      setActiveTab('organiser');
+  // Set default tab on authentication or user change
+  useEffect(() => {
+    if (user) {
+      if (user.role === 'ADMIN') {
+        setActiveTab('admin');
+      } else if (user.role === 'ORGANISER') {
+        setActiveTab('organiser');
+      } else {
+        setActiveTab('dashboard');
+      }
     }
-  });
+  }, [user]);
 
   if (loading) {
     return (
