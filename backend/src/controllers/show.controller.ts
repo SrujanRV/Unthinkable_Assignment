@@ -2,6 +2,9 @@ import { Request, Response } from 'express';
 import { prisma } from '../services/db.service';
 import { redis } from '../services/redis.service';
 import { AuthenticatedRequest } from '../middlewares/auth.middleware';
+import crypto from 'crypto';
+import QRCode from 'qrcode';
+import { sendTicketEmail } from '../services/email.service';
 
 const SEAT_HOLD_TTL_SECONDS = Number(process.env.SEAT_HOLD_TTL_SECONDS) || 600; // 10 minutes default
 
@@ -302,5 +305,181 @@ export const releaseSeats = async (req: AuthenticatedRequest, res: Response): Pr
   } catch (error) {
     console.error('[ShowSeat] Release seats error:', error);
     res.status(500).json({ error: { message: 'Internal server error releasing holds', status: 500 } });
+  }
+};
+
+export const checkoutSeats = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const { showId } = req.params;
+  const { seatIds } = req.body;
+
+  if (!req.user) {
+    res.status(401).json({ error: { message: 'Unauthorized', status: 401 } });
+    return;
+  }
+
+  if (!seatIds || !Array.isArray(seatIds) || seatIds.length === 0) {
+    res.status(400).json({ error: { message: 'Seat IDs are required to checkout', status: 400 } });
+    return;
+  }
+
+  const userId = req.user.id;
+
+  try {
+    // 1. Verify holds in Redis first (to prevent races if expired mid-checkout)
+    for (const seatId of seatIds) {
+      const lockKey = `show:${showId}:seat:${seatId}:hold`;
+      const currentHolder = await redis.get(lockKey);
+
+      if (currentHolder !== userId) {
+        res.status(400).json({
+          error: {
+            message: `Seat hold has expired or is invalid. Please select your seats and try again.`,
+            status: 400,
+          },
+        });
+        return;
+      }
+    }
+
+    // 2. Fetch full show & venue details for email confirmation
+    const show = await prisma.show.findUnique({
+      where: { id: showId },
+      include: {
+        event: true,
+        venue: true,
+        showPrices: {
+          include: { category: true },
+        },
+      },
+    });
+
+    if (!show) {
+      res.status(404).json({ error: { message: 'Showtime listing not found', status: 404 } });
+      return;
+    }
+
+    // Map prices
+    const priceMap: { [catId: string]: number } = {};
+    show.showPrices.forEach((sp) => {
+      priceMap[sp.seatCategoryId] = Number(sp.price);
+    });
+
+    // 3. Fetch show seats with physical labels
+    const showSeats = await prisma.showSeat.findMany({
+      where: {
+        showId,
+        seatId: { in: seatIds },
+      },
+      include: {
+        seat: true,
+      },
+    });
+
+    if (showSeats.length !== seatIds.length) {
+      res.status(400).json({ error: { message: 'One or more seats do not exist for this showtime', status: 400 } });
+      return;
+    }
+
+    // Double check PostgreSQL status is still HELD by this user (fail-safe)
+    const now = new Date();
+    for (const ss of showSeats) {
+      if (ss.status !== 'HELD' || ss.heldByUserId !== userId || (ss.heldUntil && ss.heldUntil < now)) {
+        res.status(400).json({
+          error: {
+            message: `Seat hold on ${ss.seat.row}${ss.seat.number} has expired. Please hold the seats again.`,
+            status: 400,
+          },
+        });
+        return;
+      }
+    }
+
+    // Calculate total price
+    let totalPrice = 0;
+    showSeats.forEach((ss) => {
+      totalPrice += priceMap[ss.seat.seatCategoryId] || 0;
+    });
+
+    // 4. Generate unique booking reference
+    const bookingReference = 'BK-' + crypto.randomBytes(4).toString('hex').toUpperCase();
+
+    // 5. Execute transactional creation and update in PostgreSQL
+    const booking = await prisma.$transaction(async (tx) => {
+      // Create Booking
+      const b = await tx.booking.create({
+        data: {
+          bookingReference,
+          userId,
+          showId,
+          status: 'CONFIRMED',
+          totalAmount: totalPrice,
+        },
+      });
+
+      // Update seat statuses to BOOKED
+      await tx.showSeat.updateMany({
+        where: {
+          showId,
+          seatId: { in: seatIds },
+        },
+        data: {
+          status: 'BOOKED',
+          bookingId: b.id,
+          heldByUserId: null,
+          heldUntil: null,
+        },
+      });
+
+      return b;
+    });
+
+    // 6. Delete Redis keys (holds are finalized)
+    const redisKeys = seatIds.map((id) => `show:${showId}:seat:${id}:hold`);
+    await redis.del(...redisKeys);
+
+    // 7. Broadcast seat bookings via Socket.io
+    const io = req.app.get('io');
+    if (io) {
+      seatIds.forEach((seatId) => {
+        io.to(`show:${showId}`).emit('seatStatusUpdate', {
+          seatId,
+          status: 'BOOKED',
+          heldByUserId: null,
+          heldUntil: null,
+        });
+      });
+    }
+
+    // 8. Generate QR Code containing bookingReference
+    const qrCodeDataUrl = await QRCode.toDataURL(bookingReference);
+
+    // 9. Dispatch confirmation email with attached QR Ticket
+    const seatLabels = showSeats.map((ss) => `${ss.seat.row}${ss.seat.number}`);
+    const emailPreviewUrl = await sendTicketEmail({
+      to: req.user.email,
+      bookingReference,
+      eventTitle: show.event.title,
+      venueName: show.venue.name,
+      venueLocation: show.venue.location,
+      startTime: show.startTime.toISOString(),
+      seats: seatLabels,
+      totalPrice,
+      qrCodeDataUrl,
+    });
+
+    res.status(200).json({
+      message: 'Booking completed successfully!',
+      booking: {
+        id: booking.id,
+        bookingReference,
+        totalPrice,
+        seats: seatLabels,
+        emailPreviewUrl,
+        qrCodeDataUrl,
+      },
+    });
+  } catch (error) {
+    console.error('[Booking] Checkout error:', error);
+    res.status(500).json({ error: { message: 'Internal server error processing checkout', status: 500 } });
   }
 };

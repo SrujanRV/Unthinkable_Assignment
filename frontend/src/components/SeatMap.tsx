@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from '../context/AuthContext';
-import { Clock, ShoppingCart, UserCheck, ShieldAlert, Loader, Trash2 } from 'lucide-react';
+import { Clock, ShoppingCart, UserCheck, ShieldAlert, Loader, Trash2, CheckCircle2, Mail, ExternalLink } from 'lucide-react';
 
 interface Seat {
   id: string;
@@ -23,6 +23,15 @@ interface SeatMapProps {
   onBack: () => void;
 }
 
+interface BookingResult {
+  id: string;
+  bookingReference: string;
+  totalPrice: number;
+  seats: string[];
+  emailPreviewUrl: string | null;
+  qrCodeDataUrl: string;
+}
+
 const BACKEND_URL = 'http://localhost:5000';
 
 export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
@@ -33,6 +42,7 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
   const [holdExpiresAt, setHoldExpiresAt] = useState<string | null>(null);
   const [countdown, setCountdown] = useState<number>(0);
   
+  const [bookingResult, setBookingResult] = useState<BookingResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showPrices, setShowPrices] = useState<{ [catId: string]: number }>({});
@@ -95,7 +105,7 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
     );
 
     return () => {
-      // 1. Release active holds on unmount
+      // Release active holds on unmount
       const held = myHeldSeatIdsRef.current;
       if (held.length > 0) {
         axios.post(`/api/shows/${showId}/release`, { seatIds: held }).catch((err) => {
@@ -103,7 +113,6 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
         });
       }
 
-      // 2. Disconnect socket
       if (socketRef.current) {
         socketRef.current.emit('leaveShow', showId);
         socketRef.current.disconnect();
@@ -142,7 +151,6 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
 
     if (!isAvailable && !isHeldByMe) return;
 
-    // If seats are already locked/held by me, clicking them does nothing or lets us release
     if (myHeldSeatIds.includes(seat.seatId)) {
       handleReleaseIndividualSeat(seat.seatId);
       return;
@@ -205,6 +213,30 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
     }
   };
 
+  const handleCheckout = async () => {
+    if (myHeldSeatIds.length === 0) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await axios.post<{ booking: BookingResult }>(`/api/shows/${showId}/checkout`, {
+        seatIds: myHeldSeatIds,
+      });
+      // Store success result (this triggers success screen)
+      setBookingResult(res.data.booking);
+      setMyHeldSeatIds([]);
+      setHoldExpiresAt(null);
+    } catch (err: any) {
+      setError(
+        err.response?.data?.error?.message ||
+        'Checkout failed. Your seat holds may have expired.'
+      );
+      // Refresh to reflect releases
+      fetchSeatMap();
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60);
     const s = secs % 60;
@@ -257,6 +289,69 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
       <div className="p-12 text-center">
         <Loader className="w-10 h-10 animate-spin text-indigo-600 mx-auto mb-2" />
         <p className="text-sm text-gray-500">Loading seating arrangement...</p>
+      </div>
+    );
+  }
+
+  // Booking Success Screen Render
+  if (bookingResult) {
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden max-w-md mx-auto my-8">
+        <div className="bg-emerald-600 px-6 py-8 text-white text-center">
+          <CheckCircle2 className="w-16 h-16 mx-auto mb-3 text-emerald-100" />
+          <h3 className="text-2xl font-bold">Booking Confirmed!</h3>
+          <p className="text-xs text-emerald-100 mt-1">Thank you for booking with Antigravity Tickets</p>
+        </div>
+
+        <div className="p-6 space-y-6">
+          <div className="space-y-3">
+            <div className="flex justify-between items-center text-xs text-gray-500 pb-2 border-b border-gray-100">
+              <span>Booking Reference</span>
+              <strong className="text-sm text-gray-800 font-mono">{bookingResult.bookingReference}</strong>
+            </div>
+            <div className="flex justify-between items-center text-xs text-gray-500 pb-2 border-b border-gray-100">
+              <span>Venue</span>
+              <strong className="text-sm text-gray-800">{venueName}</strong>
+            </div>
+            <div className="flex justify-between items-center text-xs text-gray-500 pb-2 border-b border-gray-100">
+              <span>Seats Booked</span>
+              <strong className="text-sm text-gray-800">{bookingResult.seats.join(', ')}</strong>
+            </div>
+            <div className="flex justify-between items-center text-xs text-gray-500 pb-2 border-b border-gray-100">
+              <span>Amount Paid</span>
+              <strong className="text-sm text-emerald-600 font-bold">${bookingResult.totalPrice.toFixed(2)}</strong>
+            </div>
+          </div>
+
+          <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl text-center space-y-2">
+            <span className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Your Ticket QR Entry</span>
+            <img src={bookingResult.qrCodeDataUrl} alt="Ticket QR Code" className="w-48 h-48 mx-auto border-2 border-white rounded shadow-sm" />
+            <p className="text-[10px] text-gray-400">Scan this QR code at the event entrance.</p>
+          </div>
+
+          {bookingResult.emailPreviewUrl && (
+            <a
+              href={bookingResult.emailPreviewUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center justify-center gap-1.5 w-full py-2.5 bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 rounded-lg text-xs font-bold transition-colors"
+            >
+              <Mail className="w-4.5 h-4.5" />
+              View Sent Confirmation Email
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+          )}
+
+          <button
+            onClick={() => {
+              setBookingResult(null);
+              onBack();
+            }}
+            className="w-full py-2.5 bg-gray-800 hover:bg-gray-900 text-white rounded-lg font-bold text-xs shadow transition-colors"
+          >
+            Back to Event Directory
+          </button>
+        </div>
       </div>
     );
   }
@@ -431,9 +526,9 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
                       Release Holds
                     </button>
                     <button
-                      onClick={() => alert('Checkout flow is ready! Proceeding...')}
+                      onClick={handleCheckout}
                       disabled={loading}
-                      className="w-1/2 flex items-center justify-center gap-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold text-xs shadow transition-colors"
+                      className="w-1/2 flex items-center justify-center gap-1.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold text-xs shadow transition-colors"
                     >
                       Proceed to Pay
                     </button>
