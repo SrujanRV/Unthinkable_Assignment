@@ -302,6 +302,39 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
     (catId) => categoryStatus[catId].availableCount === 0
   );
 
+  // Distinct available-state colour palette per category (by order of first appearance)
+  const CATEGORY_PALETTES = [
+    'bg-blue-500 border-blue-600 text-white hover:bg-blue-600',           // 1st cat → blue (standard)
+    'bg-violet-500 border-violet-600 text-white hover:bg-violet-600',     // 2nd cat → violet (premium)
+    'bg-yellow-400 border-yellow-500 text-gray-900 hover:bg-yellow-500',  // 3rd cat → gold (VIP)
+    'bg-teal-500 border-teal-600 text-white hover:bg-teal-600',           // 4th cat → teal (balcony)
+    'bg-rose-500 border-rose-600 text-white hover:bg-rose-600',           // 5th cat → rose
+    'bg-cyan-500 border-cyan-600 text-white hover:bg-cyan-600',           // 6th cat → cyan
+    'bg-fuchsia-500 border-fuchsia-600 text-white hover:bg-fuchsia-600',  // 7th cat → fuchsia
+    'bg-lime-500 border-lime-600 text-white hover:bg-lime-600',           // 8th cat → lime
+  ];
+
+  const CATEGORY_LEGEND_COLORS = [
+    'bg-blue-500 border-blue-600',
+    'bg-violet-500 border-violet-600',
+    'bg-yellow-400 border-yellow-500',
+    'bg-teal-500 border-teal-600',
+    'bg-rose-500 border-rose-600',
+    'bg-cyan-500 border-cyan-600',
+    'bg-fuchsia-500 border-fuchsia-600',
+    'bg-lime-500 border-lime-600',
+  ];
+
+  // Build stable categoryId → palette index sorted by first occurrence in seat list
+  const categoryOrder: string[] = [];
+  seats.forEach((s) => {
+    if (!categoryOrder.includes(s.categoryId)) categoryOrder.push(s.categoryId);
+  });
+  const getCategoryPalette = (categoryId: string) =>
+    CATEGORY_PALETTES[categoryOrder.indexOf(categoryId) % CATEGORY_PALETTES.length];
+  const getCategoryLegendColor = (categoryId: string) =>
+    CATEGORY_LEGEND_COLORS[categoryOrder.indexOf(categoryId) % CATEGORY_LEGEND_COLORS.length];
+
   const getSeatColor = (seat: Seat) => {
     const isSelected = selectedSeatIds.includes(seat.seatId);
     const isHeldByMe = (seat.status === 'HELD' && seat.heldByUserId === user?.id) || myHeldSeatIds.includes(seat.seatId);
@@ -312,10 +345,7 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
       if (isHeldByMe) return 'bg-amber-500 border-amber-600 text-white hover:bg-amber-600 animate-pulse';
       return 'bg-gray-300 border-gray-400 text-gray-500 cursor-not-allowed';
     }
-    if (seat.categoryName.toLowerCase() === 'premium') {
-      return 'bg-emerald-500 border-emerald-600 text-white hover:bg-emerald-600';
-    }
-    return 'bg-blue-500 border-blue-600 text-white hover:bg-blue-600';
+    return getCategoryPalette(seat.categoryId);
   };
 
   const getSelectedSeatsPrice = () => {
@@ -477,14 +507,13 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
 
           <div className="p-4 bg-gray-50 border border-gray-150 rounded-xl flex flex-wrap gap-4 items-center justify-center text-xs">
             <span className="font-semibold text-gray-500 mr-2">Legend:</span>
-            <div className="flex items-center gap-1.5">
-              <span className="w-3.5 h-3.5 bg-blue-500 border border-blue-600 rounded"></span>
-              <span>Standard (Available)</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-3.5 h-3.5 bg-emerald-500 border border-emerald-600 rounded"></span>
-              <span>Premium (Available)</span>
-            </div>
+            {/* Dynamic per-category colour swatches */}
+            {categoryOrder.map((catId) => (
+              <div key={catId} className="flex items-center gap-1.5">
+                <span className={`w-3.5 h-3.5 rounded border ${getCategoryLegendColor(catId)}`}></span>
+                <span>{categoryStatus[catId]?.name ?? catId} (Available)</span>
+              </div>
+            ))}
             <div className="flex items-center gap-1.5">
               <span className="w-3.5 h-3.5 bg-amber-500 border border-amber-600 rounded"></span>
               <span>Held by Me</span>
