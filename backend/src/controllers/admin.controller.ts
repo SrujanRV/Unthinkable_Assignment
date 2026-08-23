@@ -76,6 +76,9 @@ export const getVenueDetails = async (req: Request, res: Response): Promise<void
           orderBy: { name: 'asc' },
         },
         seats: {
+          include: {
+            category: true,
+          },
           orderBy: [{ row: 'asc' }, { number: 'asc' }],
         },
       },
@@ -86,7 +89,24 @@ export const getVenueDetails = async (req: Request, res: Response): Promise<void
       return;
     }
 
-    res.status(200).json({ venue });
+    const formattedSeats = venue.seats.map((seat) => ({
+      id: seat.id,
+      row: seat.row,
+      number: seat.number,
+      categoryName: seat.category.name,
+    }));
+
+    res.status(200).json({
+      venue: {
+        id: venue.id,
+        name: venue.name,
+        location: venue.location,
+        createdAt: venue.createdAt,
+        updatedAt: venue.updatedAt,
+        seatCategories: venue.seatCategories,
+        seats: formattedSeats,
+      },
+    });
   } catch (error) {
     console.error('[Admin] Get venue details error:', error);
     res.status(500).json({ error: { message: 'Internal server error fetching venue details', status: 500 } });
