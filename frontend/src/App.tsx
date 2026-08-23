@@ -110,14 +110,14 @@ function MainContent() {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
         <div className="sm:mx-auto sm:w-full sm:max-w-md text-center mb-8">
-          <span className="text-5xl">🎟️</span>
-          <h2 className="mt-4 text-3xl font-extrabold text-gray-900 tracking-tight">
+          <span className="text-6xl">🎟️</span>
+          <h2 className="mt-4 text-3xl font-extrabold text-white tracking-tight">
             Antigravity Tickets
           </h2>
-          <p className="mt-2 text-sm text-gray-600">
-            High-Concurrency Ticket Booking System
+          <p className="mt-2 text-sm text-indigo-300">
+            High-Concurrency Ticket Booking Platform
           </p>
         </div>
 
@@ -136,29 +136,29 @@ function MainContent() {
 
   // Logged-in View
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-slate-50">
       {/* Header bar */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
+      <header className="bg-gradient-to-r from-slate-900 to-indigo-950 sticky top-0 z-50 shadow-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               <span className="text-2xl">🎟️</span>
-              <span className="font-extrabold text-gray-900 text-lg">Antigravity Tickets</span>
+              <span className="font-extrabold text-white text-lg tracking-tight">Antigravity Tickets</span>
             </div>
 
             {/* Navigation Tabs */}
-            <nav className="hidden sm:flex space-x-2">
+            <nav className="hidden sm:flex items-center space-x-1">
               {isAdmin && (
                 <button
                   onClick={() => setActiveTab('admin')}
                   className={`flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg transition-colors focus:outline-none ${
                     activeTab === 'admin'
-                      ? 'bg-indigo-50 text-indigo-700'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                      ? 'bg-white/15 text-white'
+                      : 'text-white/60 hover:text-white hover:bg-white/10'
                   }`}
                 >
                   <Shield className="w-4 h-4" />
-                  Admin Panel
+                  Admin
                 </button>
               )}
               {isOrganiser && (
@@ -166,36 +166,36 @@ function MainContent() {
                   onClick={() => setActiveTab('organiser')}
                   className={`flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg transition-colors focus:outline-none ${
                     activeTab === 'organiser'
-                      ? 'bg-indigo-50 text-indigo-700'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                      ? 'bg-white/15 text-white'
+                      : 'text-white/60 hover:text-white hover:bg-white/10'
                   }`}
                 >
                   <Music className="w-4 h-4" />
-                  Organiser Panel
+                  Organiser Hub
                 </button>
               )}
               <button
                 onClick={() => setActiveTab('dashboard')}
                 className={`flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg transition-colors focus:outline-none ${
                   activeTab === 'dashboard'
-                    ? 'bg-indigo-50 text-indigo-700'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                    ? 'bg-white/15 text-white'
+                    : 'text-white/60 hover:text-white hover:bg-white/10'
                 }`}
               >
                 <LayoutGrid className="w-4 h-4" />
-                Dashboard
+                Browse
               </button>
               {isCustomer && (
                 <button
                   onClick={() => setActiveTab('bookings')}
                   className={`flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg transition-colors focus:outline-none ${
                     activeTab === 'bookings'
-                      ? 'bg-indigo-50 text-indigo-700'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                      ? 'bg-white/15 text-white'
+                      : 'text-white/60 hover:text-white hover:bg-white/10'
                   }`}
                 >
                   <Ticket className="w-4 h-4" />
-                  My Bookings
+                  My Tickets
                 </button>
               )}
               {isAdmin && (
@@ -203,40 +203,44 @@ function MainContent() {
                   onClick={() => setActiveTab('health')}
                   className={`flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg transition-colors focus:outline-none ${
                     activeTab === 'health'
-                      ? 'bg-indigo-50 text-indigo-700'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                      ? 'bg-white/15 text-white'
+                      : 'text-white/60 hover:text-white hover:bg-white/10'
                   }`}
                 >
                   <Activity className="w-4 h-4" />
-                  System Health
+                  Health
                 </button>
               )}
             </nav>
           </div>
 
 
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 text-sm text-gray-700 bg-gray-100 px-3 py-1.5 rounded-lg border border-gray-200">
-              <User className="w-4 h-4 text-gray-500" />
-              <span className="font-medium">{user?.email}</span>
-              <span className="text-xs bg-indigo-100 text-indigo-800 font-bold px-2 py-0.5 rounded uppercase">
+          <div className="flex items-center gap-3">
+            <div className="hidden sm:flex items-center gap-2 text-sm text-white/80 bg-white/10 px-3 py-1.5 rounded-lg border border-white/10">
+              <User className="w-3.5 h-3.5 text-white/60" />
+              <span className="font-medium text-white/90 text-xs">{user?.email}</span>
+              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide ${
+                isAdmin ? 'bg-amber-400/20 text-amber-200' :
+                isOrganiser ? 'bg-violet-400/20 text-violet-200' :
+                'bg-emerald-400/20 text-emerald-200'
+              }`}>
                 {user?.role}
               </span>
             </div>
 
             <button
               onClick={logout}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg border border-red-200 transition-colors focus:outline-none"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-white/80 hover:text-white hover:bg-white/10 rounded-lg border border-white/15 transition-colors focus:outline-none"
             >
               <LogOut className="w-4 h-4" />
-              Logout
+              <span className="hidden sm:inline">Logout</span>
             </button>
           </div>
         </div>
       </header>
 
       {/* Main dashboard content */}
-      <main className="max-w-7xl mx-auto py-10 px-4 sm:px-6 lg:px-8">
+      <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         {activeTab === 'admin' && isAdmin && (
           <div className="space-y-6">
             <AdminPanel />
@@ -251,18 +255,20 @@ function MainContent() {
 
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 text-center sm:text-left">
-              <h1 className="text-2xl font-bold text-gray-900">Hello, {user?.email}!</h1>
-              <p className="text-gray-500 mt-1">
-                You are logged in as <strong className="text-indigo-600 uppercase">{user?.role}</strong>.
-                {isAdmin ? (
-                  <span> Use the tabs above to manage venues and layouts, or check system logs.</span>
-                ) : isOrganiser ? (
-                  <span> Use the Organiser Panel to list new events and manage tickets pricing.</span>
-                ) : (
-                  <span> Welcome to the ticketing platform! Search and book your seats below.</span>
-                )}
-              </p>
+            <div className="bg-gradient-to-br from-indigo-600 to-violet-700 rounded-2xl p-6 text-white shadow-lg">
+              <div className="flex items-start gap-4">
+                <span className="text-4xl">🎟️</span>
+                <div>
+                  <h1 className="text-2xl font-extrabold tracking-tight">Welcome back!</h1>
+                  <p className="text-indigo-200 mt-1 text-sm">
+                    {isAdmin
+                      ? 'Use the navigation above to manage venues, check system health, or browse events.'
+                      : isOrganiser
+                      ? 'Switch to Organiser Hub to manage your listings, or browse events below.'
+                      : 'Browse upcoming movies and concerts below, then select seats to book your tickets.'}
+                  </p>
+                </div>
+              </div>
             </div>
             <BrowseEvents />
           </div>
@@ -276,8 +282,8 @@ function MainContent() {
 
         {activeTab === 'health' && isAdmin && (
           <div>
-            <div className="border-b border-gray-250 pb-3 mb-6">
-              <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-1.5">
+            <div className="border-b border-gray-200 pb-3 mb-6">
+              <h2 className="text-lg font-bold text-gray-800 flex items-center gap-1.5">
                 <Activity className="w-5 h-5 text-indigo-500" />
                 Service Health Metrics
               </h2>

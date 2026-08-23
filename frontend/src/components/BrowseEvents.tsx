@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
-import { Search, Calendar, MapPin, ArrowRight, Loader } from 'lucide-react';
+import { Search, Calendar, MapPin, ArrowRight, Loader, Film, Music2, Filter } from 'lucide-react';
 import SeatMap from './SeatMap';
 
 interface Venue {
@@ -133,27 +133,47 @@ export default function BrowseEvents() {
     );
   }
 
+  const typeConfig = {
+    MOVIE: {
+      icon: Film,
+      gradient: 'from-slate-700 to-slate-900',
+      badge: 'bg-slate-100 text-slate-700 border-slate-200',
+      btn: 'bg-slate-700 hover:bg-slate-800',
+      accent: 'text-slate-600',
+    },
+    CONCERT: {
+      icon: Music2,
+      gradient: 'from-indigo-700 to-violet-900',
+      badge: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+      btn: 'bg-indigo-600 hover:bg-indigo-700',
+      accent: 'text-indigo-600',
+    },
+  };
+
   return (
     <div className="space-y-6">
       {/* Filtering Header panel */}
-      <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm space-y-4">
-        <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-          🔍 Browse Movies &amp; Concerts
-        </h2>
+      <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
+        <div className="flex items-center gap-2 mb-4">
+          <Filter className="w-4 h-4 text-gray-400" />
+          <h2 className="text-sm font-bold text-gray-600 uppercase tracking-wider">
+            Browse Movies &amp; Concerts
+          </h2>
+        </div>
 
         {/* Filter controls grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
           {/* Keyword Search */}
           <div className="relative">
-            <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">
+            <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400 pointer-events-none">
               <Search className="w-4 h-4" />
             </span>
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 block w-full rounded-md border border-gray-300 px-3 py-1.5 text-xs focus:border-indigo-500 focus:outline-none"
-              placeholder="Search by keywords..."
+              className="pl-9 block w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:border-indigo-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all"
+              placeholder="Search events..."
             />
           </div>
 
@@ -161,18 +181,18 @@ export default function BrowseEvents() {
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
-            className="block w-full rounded-md border border-gray-300 px-3 py-1.5 text-xs bg-white focus:border-indigo-500 focus:outline-none"
+            className="block w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 focus:border-indigo-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all"
           >
             <option value="ALL">All Categories</option>
-            <option value="CONCERT">Concerts</option>
-            <option value="MOVIE">Movies</option>
+            <option value="CONCERT">🎵 Concerts</option>
+            <option value="MOVIE">🎬 Movies</option>
           </select>
 
           {/* Venue Filter */}
           <select
             value={venueFilter}
             onChange={(e) => setVenueFilter(e.target.value)}
-            className="block w-full rounded-md border border-gray-300 px-3 py-1.5 text-xs bg-white focus:border-indigo-500 focus:outline-none"
+            className="block w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 focus:border-indigo-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all"
           >
             <option value="ALL">All Venues</option>
             {venues.map((v) => (
@@ -183,103 +203,129 @@ export default function BrowseEvents() {
           </select>
 
           {/* Date Filter */}
-          <div className="relative">
-            <input
-              type="date"
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="block w-full rounded-md border border-gray-300 px-3 py-1.5 text-xs focus:border-indigo-500 focus:outline-none"
-            />
-          </div>
+          <input
+            type="date"
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+            className="block w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 focus:border-indigo-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all"
+          />
         </div>
       </div>
 
       {error && (
-        <div className="p-4 text-sm text-red-700 bg-red-50 rounded-lg border border-red-200">
+        <div className="p-4 text-sm text-red-700 bg-red-50 rounded-xl border border-red-200">
           {error}
         </div>
       )}
 
       {/* Events Grid */}
       {loading ? (
-        <div className="py-12 text-center">
-          <Loader className="w-10 h-10 animate-spin text-indigo-600 mx-auto" />
-          <p className="mt-2 text-sm text-gray-500">Browsing events...</p>
+        <div className="py-16 text-center">
+          <Loader className="w-10 h-10 animate-spin text-indigo-500 mx-auto" />
+          <p className="mt-3 text-sm text-gray-500">Finding events for you...</p>
         </div>
       ) : filteredEvents.length === 0 ? (
-        <div className="p-8 text-center text-gray-400 border-2 border-dashed border-gray-200 rounded-lg">
-          No matches found for your filter criteria. Try resetting filters.
+        <div className="py-16 text-center text-gray-400 border-2 border-dashed border-gray-200 rounded-2xl">
+          <p className="text-base font-semibold">No events match your search</p>
+          <p className="text-sm mt-1">Try adjusting your filters or search term</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {filteredEvents.map((event) => (
-            <div
-              key={event.id}
-              className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col justify-between"
-            >
-              <div className="p-5 space-y-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-xl font-bold text-gray-800">{event.title}</span>
-                  <span className="text-[10px] bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold px-1.5 py-0.5 rounded uppercase">
-                    {event.type}
+          {filteredEvents.map((event) => {
+            const cfg = typeConfig[event.type];
+            const TypeIcon = cfg.icon;
+
+            return (
+              <div
+                key={event.id}
+                className="bg-white rounded-2xl border border-gray-200 overflow-hidden flex flex-col shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
+              >
+                {/* Card header stripe */}
+                <div className={`bg-gradient-to-r ${cfg.gradient} px-5 py-4 flex items-start gap-3`}>
+                  <div className="w-10 h-10 bg-white/15 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <TypeIcon className="w-5 h-5 text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-base font-bold text-white leading-tight">{event.title}</h3>
+                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wide ${cfg.badge} bg-white/90`}>
+                        {event.type}
+                      </span>
+                    </div>
+                    <p className="text-sm text-white/75 mt-0.5 line-clamp-2">{event.description}</p>
+                  </div>
+                </div>
+
+                {/* Showtimes */}
+                <div className="px-5 py-4 flex-1 space-y-3 bg-gray-50/40">
+                  <span className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                    Available Showtimes
                   </span>
-                </div>
-                <p className="text-sm text-gray-500 line-clamp-3">{event.description}</p>
-              </div>
+                  <div className="space-y-2.5">
+                    {event.shows
+                      .filter((show) => {
+                        const matchesVenue = venueFilter === 'ALL' || show.venueId === venueFilter;
+                        let matchesDate = true;
+                        if (dateFilter) {
+                          const showDateStr = new Date(show.startTime).toISOString().split('T')[0];
+                          matchesDate = showDateStr === dateFilter;
+                        }
+                        return matchesVenue && matchesDate;
+                      })
+                      .map((show) => {
+                        const lowestPrice = show.showPrices.length > 0
+                          ? Math.min(...show.showPrices.map((p) => Number(p.price)))
+                          : null;
 
-              {/* Show times container */}
-              <div className="px-5 pb-5 pt-3 border-t border-gray-100 bg-gray-50/50 space-y-3">
-                <span className="block text-xs font-bold text-gray-400 uppercase tracking-wider">
-                  Available Showtimes:
-                </span>
-                <div className="space-y-2">
-                  {event.shows
-                    .filter((show) => {
-                      const matchesVenue = venueFilter === 'ALL' || show.venueId === venueFilter;
-                      let matchesDate = true;
-                      if (dateFilter) {
-                        const showDateStr = new Date(show.startTime).toISOString().split('T')[0];
-                        matchesDate = showDateStr === dateFilter;
-                      }
-                      return matchesVenue && matchesDate;
-                    })
-                    .map((show) => (
-                      <div
-                        key={show.id}
-                        className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-white border border-gray-200 rounded-lg text-xs gap-3 hover:border-indigo-400 hover:shadow-sm transition-all"
-                      >
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-1.5 text-gray-700 font-bold">
-                            <Calendar className="w-4.5 h-4.5 text-indigo-500" />
-                            <span>{new Date(show.startTime).toLocaleString()}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-gray-500">
-                            <MapPin className="w-4 h-4 text-indigo-400" />
-                            <span>
-                              {show.venue.name} ({show.venue.location})
-                            </span>
-                          </div>
-                        </div>
+                        return (
+                          <div
+                            key={show.id}
+                            className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 bg-white border border-gray-200 rounded-xl text-sm gap-3 hover:border-indigo-300 hover:shadow-sm transition-all duration-150 group"
+                          >
+                            <div className="space-y-1.5 flex-1 min-w-0">
+                              <div className="flex items-center gap-2 text-gray-800 font-semibold">
+                                <Calendar className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+                                <span className="text-sm">{new Date(show.startTime).toLocaleString()}</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-gray-500 text-xs">
+                                <MapPin className="w-3.5 h-3.5 text-indigo-300 flex-shrink-0" />
+                                <span>{show.venue.name} &middot; {show.venue.location}</span>
+                              </div>
+                              {lowestPrice !== null && (
+                                <div className="flex flex-wrap gap-1.5 pt-0.5">
+                                  {show.showPrices.map((sp) => (
+                                    <span
+                                      key={sp.id}
+                                      className="text-[10px] font-bold bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full"
+                                    >
+                                      {sp.category.name} · ${Number(sp.price).toFixed(2)}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
 
-                        <button
-                          onClick={() =>
-                            setSelectedShow({
-                              showId: show.id,
-                              eventId: event.id,
-                              venueName: show.venue.name,
-                            })
-                          }
-                          className="flex items-center justify-center gap-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold uppercase transition-colors"
-                        >
-                          Select Seats
-                          <ArrowRight className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))}
+                            <button
+                              onClick={() =>
+                                setSelectedShow({
+                                  showId: show.id,
+                                  eventId: event.id,
+                                  venueName: show.venue.name,
+                                })
+                              }
+                              className={`flex items-center justify-center gap-1.5 px-4 py-2 ${cfg.btn} text-white rounded-lg text-xs font-bold transition-all duration-150 shadow-sm group-hover:shadow-md whitespace-nowrap`}
+                            >
+                              Select Seats
+                              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
