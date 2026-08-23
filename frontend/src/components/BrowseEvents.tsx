@@ -71,6 +71,29 @@ export default function BrowseEvents() {
 
   useEffect(() => {
     fetchEventsAndVenues();
+
+    // Intercept waitlist claims tokens from email redirects
+    const params = new URLSearchParams(window.location.search);
+    const claimToken = params.get('claimToken');
+    if (claimToken) {
+      try {
+        const payloadBase64 = claimToken.split('.')[1];
+        const payloadJson = atob(payloadBase64);
+        const payload = JSON.parse(payloadJson);
+        const { showId } = payload;
+
+        if (showId) {
+          console.log('[Waitlist Claim] Automatically opening show:', showId);
+          setSelectedShow({
+            showId,
+            eventId: '',
+            venueName: 'Your Waitlist Offer',
+          });
+        }
+      } catch (err) {
+        console.error('Failed to parse claimToken:', err);
+      }
+    }
   }, []);
 
   // Filter listings based on criteria

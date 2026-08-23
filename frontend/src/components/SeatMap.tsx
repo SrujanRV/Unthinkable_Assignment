@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from '../context/AuthContext';
-import { Clock, ShoppingCart, UserCheck, ShieldAlert, Loader, Trash2, CheckCircle2, Mail, ExternalLink } from 'lucide-react';
+import { Clock, ShoppingCart, UserCheck, ShieldAlert, Loader, Trash2, CheckCircle2, Mail, ExternalLink, Users } from 'lucide-react';
 
 interface Seat {
   id: string;
@@ -59,7 +59,21 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
   const fetchSeatMap = async () => {
     try {
       const seatsRes = await axios.get<{ seats: Seat[] }>(`/api/shows/${showId}/seats`);
-      setSeats(seatsRes.data.seats);
+      const allSeats = seatsRes.data.seats;
+      setSeats(allSeats);
+
+      // Pre-select seats held by me on mount (waitlist claims auto-activation)
+      const heldByMe = allSeats.filter((s) => s.status === 'HELD' && s.heldByUserId === user?.id);
+      if (heldByMe.length > 0) {
+        setMyHeldSeatIds(heldByMe.map((s) => s.seatId));
+        // Set hold expiry to the earliest held seat
+        const earliestExpiry = heldByMe.reduce((earliest, current) => {
+          if (!earliest.heldUntil) return current;
+          if (!current.heldUntil) return earliest;
+          return new Date(current.heldUntil) < new Date(earliest.heldUntil) ? current : earliest;
+        });
+        setHoldExpiresAt(earliestExpiry.heldUntil);
+      }
 
       const showRes = await axios.get<{ show: any }>(`/api/shows/${showId}`);
       const prices: { [catId: string]: number } = {};
@@ -221,7 +235,6 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
       const res = await axios.post<{ booking: BookingResult }>(`/api/shows/${showId}/checkout`, {
         seatIds: myHeldSeatIds,
       });
-      // Store success result (this triggers success screen)
       setBookingResult(res.data.booking);
       setMyHeldSeatIds([]);
       setHoldExpiresAt(null);
@@ -230,8 +243,23 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
         err.response?.data?.error?.message ||
         'Checkout failed. Your seat holds may have expired.'
       );
-      // Refresh to reflect releases
       fetchSeatMap();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleJoinWaitlist = async (catId: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await axios.post<{ message: string; waitlistEntry: { position: number } }>(
+        `/api/shows/${showId}/waitlist`,
+        { seatCategoryId: catId }
+      );
+      alert(`Success! Joined queue. Your position in waitlist is #${res.data.waitlistEntry.position}.`);
+    } catch (err: any) {
+      setError(err.response?.data?.error?.message || 'Failed to join waitlist.');
     } finally {
       setLoading(false);
     }
@@ -243,6 +271,7 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
+  // Group seats by row to render layout
   const rows: { [row: string]: Seat[] } = {};
   seats.forEach((seat) => {
     if (!rows[seat.row]) {
@@ -255,6 +284,23 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
   sortedRows.forEach((rowKey) => {
     rows[rowKey].sort((a, b) => a.number - b.number);
   });
+
+  // Calculate Sold out categories
+  const categoryStatus: { [catId: string]: { name: string; availableCount: number } } = {};
+  seats.forEach((seat) => {
+    if (!categoryStatus[seat.categoryId]) {
+      categoryStatus[seat.categoryId] = { name: seat.categoryName, availableCount: 0 };
+    }
+    const isAvailable = seat.status === 'AVAILABLE';
+    const isHeldByMe = (seat.status === 'HELD' && seat.heldByUserId === user?.id) || myHeldSeatIds.includes(seat.seatId);
+    if (isAvailable || isHeldByMe) {
+      categoryStatus[seat.categoryId].availableCount++;
+    }
+  });
+
+  const soldOutCategories = Object.keys(categoryStatus).filter(
+    (catId) => categoryStatus[catId].availableCount === 0
+  );
 
   const getSeatColor = (seat: Seat) => {
     const isSelected = selectedSeatIds.includes(seat.seatId);
@@ -455,6 +501,7 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
         </div>
 
         <div className="space-y-6">
+          {/* Reservation Card */}
           <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 space-y-4">
             <h4 className="font-bold text-gray-800 text-sm flex items-center justify-between">
               <span className="flex items-center gap-1.5">
@@ -537,6 +584,33 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
               </div>
             )}
           </div>
+
+          {/* Sold out / Waitlist Section */}
+          {soldOutCategories.length > 0 && (
+            <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-200 space-y-3">
+              <h4 className="font-bold text-indigo-900 text-xs flex items-center gap-1.5">
+                <Users className="w-4.5 h-4.5 text-indigo-600" />
+                Queue Waitlist Active
+              </h4>
+              <p className="text-[10px] text-indigo-700">
+                The seat categories below are fully booked. Join the waitlist to receive priority ticket offers if seats are released.
+              </p>
+              <div className="space-y-2">
+                {soldOutCategories.map((catId) => (
+                  <div key={catId} className="flex justify-between items-center p-2.5 bg-white border border-indigo-150 rounded-lg text-xs">
+                    <span className="font-bold text-gray-700">{categoryStatus[catId].name}</span>
+                    <button
+                      onClick={() => handleJoinWaitlist(catId)}
+                      disabled={loading}
+                      className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-[10px] font-bold transition-colors focus:outline-none"
+                    >
+                      Join Queue
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 text-xs text-amber-800 flex items-start gap-2">
             <ShieldAlert className="w-4.5 h-4.5 mt-0.5 flex-shrink-0 text-amber-500" />

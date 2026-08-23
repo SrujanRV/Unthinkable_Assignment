@@ -7,6 +7,7 @@ import adminRoutes from './routes/admin.routes';
 import organiserRoutes from './routes/organiser.routes';
 import generalRoutes from './routes/general.routes';
 import showRoutes from './routes/show.routes';
+import bookingRoutes from './routes/booking.routes';
 import { errorHandler } from './middlewares/error.middleware';
 
 // Load environment variables
@@ -30,6 +31,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/organiser', organiserRoutes);
 app.use('/api/shows', showRoutes);
+app.use('/api/bookings', bookingRoutes);
 app.use('/api', generalRoutes);
 
 // Catch-all 404

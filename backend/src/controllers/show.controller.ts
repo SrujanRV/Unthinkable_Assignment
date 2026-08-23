@@ -430,6 +430,20 @@ export const checkoutSeats = async (req: AuthenticatedRequest, res: Response): P
         },
       });
 
+      // Mark matching waitlist entries as CONFIRMED if user was waitlisted
+      const categoryIds = showSeats.map((ss) => ss.seat.seatCategoryId);
+      await tx.waitlistEntry.updateMany({
+        where: {
+          showId,
+          userId,
+          seatCategoryId: { in: categoryIds },
+          status: 'OFFERED',
+        },
+        data: {
+          status: 'CONFIRMED',
+        },
+      });
+
       return b;
     });
 
