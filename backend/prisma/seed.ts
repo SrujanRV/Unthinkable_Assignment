@@ -59,6 +59,7 @@ async function main() {
   const premiumCategory = await prisma.seatCategory.create({
     data: {
       name: 'Premium',
+      priceMultiplier: 1.50,
       venueId: venue.id,
     },
   });
@@ -66,6 +67,7 @@ async function main() {
   const standardCategory = await prisma.seatCategory.create({
     data: {
       name: 'Standard',
+      priceMultiplier: 1.00,
       venueId: venue.id,
     },
   });

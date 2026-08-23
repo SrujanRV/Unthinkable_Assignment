@@ -64,6 +64,7 @@ model Venue {
 model SeatCategory {
   id              String          @id @default(uuid())
   name            String          // e.g. "Premium", "Standard"
+  priceMultiplier Decimal         @default(1.0) @db.Decimal(5, 2)
   venueId         String
   venue           Venue           @relation(fields: [venueId], references: [id], onDelete: Cascade)
   seats           Seat[]
