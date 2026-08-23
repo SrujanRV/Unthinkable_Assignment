@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
-import { Plus, Edit3, Calendar, MapPin, Layers, DollarSign, Save, Loader, ArrowLeft } from 'lucide-react';
+import { Plus, Edit3, Calendar, MapPin, Layers, DollarSign, Save, Loader, BarChart3, Users, Landmark } from 'lucide-react';
 
 interface SeatCategory {
   id: string;
@@ -47,11 +47,16 @@ interface OrganiserEvent {
 }
 
 export default function OrganiserPanel() {
+  const [panelMode, setPanelMode] = useState<'listings' | 'metrics'>('listings');
   const [events, setEvents] = useState<OrganiserEvent[]>([]);
   const [venues, setVenues] = useState<Venue[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<OrganiserEvent | null>(null);
   const [isCreatingEvent, setIsCreatingEvent] = useState(false);
   const [isEditingEvent, setIsEditingEvent] = useState(false);
+
+  // Metrics Dashboard State
+  const [metrics, setMetrics] = useState<any[]>([]);
+  const [loadingMetrics, setLoadingMetrics] = useState(false);
 
   // Form State
   const [title, setTitle] = useState('');
@@ -84,10 +89,30 @@ export default function OrganiserPanel() {
     }
   };
 
+  const fetchMetrics = async () => {
+    setLoadingMetrics(true);
+    try {
+      const res = await axios.get<{ metrics: any[] }>('/api/organiser/metrics');
+      setMetrics(res.data.metrics);
+    } catch (err: any) {
+      setError(err.response?.data?.error?.message || 'Failed to fetch sales metrics');
+    } finally {
+      setLoadingMetrics(false);
+    }
+  };
+
   useEffect(() => {
-    fetchMyEvents();
     fetchVenues();
+    fetchMyEvents();
   }, []);
+
+  useEffect(() => {
+    if (panelMode === 'metrics') {
+      fetchMetrics();
+    } else {
+      fetchMyEvents();
+    }
+  }, [panelMode]);
 
   // Handle auto-populating pricing based on multipliers
   const handleBasePriceChange = (val: string) => {
@@ -98,12 +123,12 @@ export default function OrganiserPanel() {
     const selectedVenue = venues.find((v) => v.id === selectedVenueId);
     if (!selectedVenue) return;
 
-    const autoPrices: { [catId: string]: string } = {};
+    const prices: { [catId: string]: string } = {};
     selectedVenue.seatCategories.forEach((cat) => {
-      const finalPrice = numericBase * Number(cat.priceMultiplier);
-      autoPrices[cat.id] = finalPrice.toFixed(2);
+      const catPrice = (numericBase * Number(cat.priceMultiplier)).toFixed(2);
+      prices[cat.id] = catPrice;
     });
-    setCategoryPrices(autoPrices);
+    setCategoryPrices(prices);
   };
 
   const handleVenueChange = (venueId: string) => {
@@ -112,25 +137,27 @@ export default function OrganiserPanel() {
     setCategoryPrices({});
   };
 
+  const setIsCreatingVenueFormEmpty = () => {
+    setTitle('');
+    setDescription('');
+    setType('CONCERT');
+    setSelectedVenueId('');
+    setStartTime('');
+    setCategoryPrices({});
+    setBasePrice('');
+  };
+
   const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !description || !selectedVenueId || !startTime) {
-      setError('Please fill in all fields');
-      return;
-    }
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
 
-    const priceList = Object.keys(categoryPrices).map((catId) => ({
+    const pricesPayload = Object.keys(categoryPrices).map((catId) => ({
       seatCategoryId: catId,
       price: parseFloat(categoryPrices[catId]),
     }));
 
-    if (priceList.some((p) => isNaN(p.price) || p.price <= 0)) {
-      setError('Please assign a valid positive price to all seat categories');
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
     try {
       await axios.post('/api/organiser/events', {
         title,
@@ -138,12 +165,12 @@ export default function OrganiserPanel() {
         type,
         venueId: selectedVenueId,
         startTime: new Date(startTime).toISOString(),
-        prices: priceList,
+        prices: pricesPayload,
       });
 
-      setSuccess('Event and showtime listing created successfully!');
-      setIsCreatingVenueFormEmpty();
+      setSuccess('Event listing created successfully!');
       setIsCreatingEvent(false);
+      setIsCreatingVenueFormEmpty();
       fetchMyEvents();
     } catch (err: any) {
       setError(err.response?.data?.error?.message || 'Failed to create listing');
@@ -158,11 +185,13 @@ export default function OrganiserPanel() {
     setDescription(event.description);
     setType(event.type);
 
-    const mainShow = event.shows[0];
-    if (mainShow) {
-      setStartTime(new Date(mainShow.startTime).toISOString().slice(0, 16));
+    const show = event.shows[0];
+    if (show) {
+      const localTime = new Date(show.startTime).toISOString().slice(0, 16);
+      setStartTime(localTime);
+
       const prices: { [catId: string]: string } = {};
-      mainShow.showPrices.forEach((sp) => {
+      show.showPrices.forEach((sp) => {
         prices[sp.seatCategoryId] = Number(sp.price).toFixed(2);
       });
       setCategoryPrices(prices);
@@ -174,27 +203,27 @@ export default function OrganiserPanel() {
     e.preventDefault();
     if (!selectedEvent) return;
 
-    const mainShow = selectedEvent.shows[0];
-    const priceList = mainShow
-      ? Object.keys(categoryPrices).map((catId) => ({
-          seatCategoryId: catId,
-          price: parseFloat(categoryPrices[catId]),
-        }))
-      : [];
-
     setLoading(true);
     setError(null);
+    setSuccess(null);
+
+    const show = selectedEvent.shows[0];
+    const pricesPayload = Object.keys(categoryPrices).map((catId) => ({
+      seatCategoryId: catId,
+      price: parseFloat(categoryPrices[catId]),
+    }));
+
     try {
       await axios.put(`/api/organiser/events/${selectedEvent.id}`, {
         title,
         description,
         type,
-        showId: mainShow?.id,
-        startTime: startTime ? new Date(startTime).toISOString() : undefined,
-        prices: priceList,
+        showId: show?.id,
+        startTime: new Date(startTime).toISOString(),
+        prices: pricesPayload,
       });
 
-      setSuccess('Event listing updated successfully!');
+      setSuccess('Listing details updated successfully!');
       setIsEditingEvent(false);
       setSelectedEvent(null);
       setIsCreatingVenueFormEmpty();
@@ -206,93 +235,92 @@ export default function OrganiserPanel() {
     }
   };
 
-  const setIsCreatingVenueFormEmpty = () => {
-    setTitle('');
-    setDescription('');
-    setSelectedVenueId('');
-    setStartTime('');
-    setCategoryPrices({});
-    setBasePrice('');
-  };
-
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
       {/* Header Banner */}
-      <div className="bg-indigo-900 px-6 py-4 text-white flex items-center justify-between">
+      <div className="bg-indigo-950 px-6 py-4 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold flex items-center gap-2">🎸 Event Organiser Dashboard</h2>
-          <p className="text-xs text-indigo-200">List events, schedule showtimes and set ticket pricing</p>
+          <h2 className="text-xl font-bold flex items-center gap-2">🎸 Organiser Hub</h2>
+          <p className="text-xs text-indigo-200">Schedule listings, override pricing, and track booking sales metrics</p>
         </div>
-        {(isCreatingEvent || isEditingEvent) && (
+        <div className="flex gap-2">
+          <button
+            onClick={() => setPanelMode('listings')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors focus:outline-none ${
+              panelMode === 'listings' && !isCreatingEvent && !isEditingEvent
+                ? 'bg-white text-indigo-950 shadow-sm'
+                : 'text-white hover:bg-white/10'
+            }`}
+          >
+            Manage Listings
+          </button>
           <button
             onClick={() => {
               setIsCreatingEvent(false);
               setIsEditingEvent(false);
-              setSelectedEvent(null);
-              setIsCreatingVenueFormEmpty();
+              setPanelMode('metrics');
             }}
-            className="flex items-center gap-1 text-xs font-semibold px-3 py-1.5 bg-indigo-800 hover:bg-indigo-700 rounded-md border border-indigo-700 transition-colors"
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors focus:outline-none ${
+              panelMode === 'metrics'
+                ? 'bg-white text-indigo-950 shadow-sm'
+                : 'text-white hover:bg-white/10'
+            }`}
           >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            Back to My Events
+            Sales Dashboard
           </button>
-        )}
+        </div>
       </div>
 
       <div className="p-6">
-        {/* Messages */}
-        {error && (
-          <div className="p-4 mb-4 text-sm text-red-700 bg-red-50 rounded-lg border border-red-200">
-            {error}
-          </div>
-        )}
         {success && (
-          <div className="p-4 mb-4 text-sm text-green-700 bg-green-50 rounded-lg border border-green-200">
+          <div className="p-4 mb-4 text-sm text-emerald-700 bg-emerald-50 rounded-lg border border-emerald-250">
             {success}
           </div>
         )}
+        {error && (
+          <div className="p-4 mb-4 text-sm text-red-700 bg-red-50 rounded-lg border border-red-250">
+            {error}
+          </div>
+        )}
 
-        {/* SECTION 1: Event List */}
-        {!isCreatingEvent && !isEditingEvent && (
-          <div>
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-bold text-gray-800">My Hosted Listings</h3>
+        {/* SECTION 1: Listings Management */}
+        {panelMode === 'listings' && !isCreatingEvent && !isEditingEvent && (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center pb-4 border-b border-gray-150">
+              <h3 className="text-lg font-bold text-gray-800">Scheduled Shows</h3>
               <button
                 onClick={() => setIsCreatingEvent(true)}
-                className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow transition-colors"
+                className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow transition-colors"
               >
                 <Plus className="w-4 h-4" />
-                Create New Event
+                Schedule Event
               </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-6">
               {events.length === 0 ? (
-                <div className="p-8 text-center text-gray-400 border-2 border-dashed border-gray-200 rounded-lg">
-                  You haven&apos;t hosted any events yet. Click &quot;Create New Event&quot; to list a concert or movie!
+                <div className="py-12 text-center text-gray-400 border border-dashed rounded-xl">
+                  You have not listed any shows yet. Click &apos;Schedule Event&apos; to register one.
                 </div>
               ) : (
                 events.map((event) => (
                   <div
                     key={event.id}
-                    className="p-5 border border-gray-200 rounded-xl hover:border-gray-300 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4"
+                    className="p-5 border border-gray-250 rounded-xl hover:border-gray-350 hover:shadow-sm transition-all flex flex-col md:flex-row justify-between gap-4"
                   >
-                    <div className="space-y-1">
+                    <div className="space-y-3 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-xl font-bold text-gray-800">{event.title}</span>
-                        <span className="text-[10px] bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold px-1.5 py-0.5 rounded uppercase">
+                        <span className="text-lg font-extrabold text-gray-850">{event.title}</span>
+                        <span className="text-[10px] bg-indigo-50 text-indigo-700 font-bold px-1.5 py-0.5 rounded uppercase border border-indigo-200">
                           {event.type}
                         </span>
                       </div>
-                      <p className="text-sm text-gray-500 line-clamp-2 max-w-xl">
+                      <p className="text-xs text-gray-500 line-clamp-2 max-w-2xl">
                         {event.description}
                       </p>
 
                       {event.shows.map((show) => (
-                        <div
-                          key={show.id}
-                          className="mt-3 pt-3 border-t border-gray-100 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs text-gray-500"
-                        >
+                        <div key={show.id} className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-gray-450 font-medium">
                           <div className="flex items-center gap-1.5">
                             <Calendar className="w-4 h-4 text-indigo-500 flex-shrink-0" />
                             <span>{new Date(show.startTime).toLocaleString()}</span>
@@ -316,7 +344,7 @@ export default function OrganiserPanel() {
                         {event.shows[0]?.showPrices.map((sp) => (
                           <span
                             key={sp.id}
-                            className="bg-gray-100 border border-gray-200 px-2 py-0.5 rounded"
+                            className="bg-gray-50 border border-gray-200 px-2 py-0.5 rounded"
                           >
                             {sp.category.name}: ${Number(sp.price).toFixed(2)}
                           </span>
@@ -324,7 +352,7 @@ export default function OrganiserPanel() {
                       </div>
                       <button
                         onClick={() => handleEditClick(event)}
-                        className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-50 border border-indigo-200 rounded-lg transition-colors"
+                        className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-50 border border-indigo-200 rounded-lg transition-colors focus:outline-none"
                       >
                         <Edit3 className="w-3.5 h-3.5" />
                         Edit Details
@@ -337,8 +365,201 @@ export default function OrganiserPanel() {
           </div>
         )}
 
-        {/* SECTION 2: Create Event Form */}
-        {isCreatingEvent && (
+        {/* SECTION 2: Sales Metrics Dashboard Tab */}
+        {panelMode === 'metrics' && (
+          <div className="space-y-6">
+            {loadingMetrics ? (
+              <div className="py-12 text-center">
+                <Loader className="w-10 h-10 animate-spin text-indigo-655 mx-auto" />
+                <p className="mt-2 text-xs text-gray-500">Compiling event revenue metrics...</p>
+              </div>
+            ) : metrics.length === 0 ? (
+              <div className="py-12 text-center text-gray-400 border border-dashed rounded-xl">
+                No events listed yet. Switch back to the listings tab to register shows!
+              </div>
+            ) : (
+              <div className="space-y-8">
+                {/* Summary Widgets */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="p-4 bg-indigo-50 border border-indigo-150 rounded-xl flex items-center gap-4">
+                    <Landmark className="w-8 h-8 text-indigo-600" />
+                    <div>
+                      <span className="block text-[10px] uppercase font-bold text-indigo-500 tracking-wider">Active Shows</span>
+                      <span className="text-xl font-black text-indigo-950">{metrics.length}</span>
+                    </div>
+                  </div>
+                  <div className="p-4 bg-emerald-50 border border-emerald-150 rounded-xl flex items-center gap-4">
+                    <Users className="w-8 h-8 text-emerald-600" />
+                    <div>
+                      <span className="block text-[10px] uppercase font-bold text-emerald-500 tracking-wider">Tickets Booked</span>
+                      <span className="text-xl font-black text-emerald-950">
+                        {metrics.reduce((acc, curr) => acc + curr.shows.reduce((sAcc: number, sCurr: any) => sAcc + sCurr.bookedSeats, 0), 0)}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="p-4 bg-amber-50 border border-amber-150 rounded-xl flex items-center gap-4">
+                    <BarChart3 className="w-8 h-8 text-amber-600" />
+                    <div>
+                      <span className="block text-[10px] uppercase font-bold text-amber-500 tracking-wider">Gross Revenue</span>
+                      <span className="text-xl font-black text-amber-950">
+                        ${metrics.reduce((acc, curr) => acc + curr.shows.reduce((sAcc: number, sCurr: any) => sAcc + sCurr.revenue, 0), 0).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Per Event Shows Metrics Card */}
+                {metrics.map((event) => (
+                  <div key={event.eventId} className="bg-white border border-gray-250 rounded-2xl overflow-hidden shadow-sm">
+                    <div className="bg-gray-50 border-b border-gray-200 px-6 py-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="font-extrabold text-gray-800 text-sm">{event.title}</h3>
+                          <span className="text-[9px] bg-indigo-100 text-indigo-850 font-bold px-1.5 py-0.5 rounded uppercase tracking-wide">
+                            {event.type}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-6 space-y-6">
+                      {event.shows.map((show: any) => {
+                        const percentFilled = show.totalSeats > 0 ? (show.bookedSeats / show.totalSeats) * 100 : 0;
+
+                        // Group timeline points by date
+                        const dailyBookingsMap: { [date: string]: { count: number; revenue: number } } = {};
+                        show.timeline.forEach((point: any) => {
+                          const dateStr = new Date(point.date).toLocaleDateString();
+                          if (!dailyBookingsMap[dateStr]) {
+                            dailyBookingsMap[dateStr] = { count: 0, revenue: 0 };
+                          }
+                          dailyBookingsMap[dateStr].count += point.ticketsCount;
+                          dailyBookingsMap[dateStr].revenue += point.amount;
+                        });
+
+                        const dailyTimeline = Object.keys(dailyBookingsMap).map((date) => ({
+                          date,
+                          ...dailyBookingsMap[date],
+                        }));
+
+                        const maxDailySales = Math.max(1, ...dailyTimeline.map((d) => d.count));
+
+                        return (
+                          <div key={show.id} className="space-y-4 pb-6 border-b border-gray-150 last:border-b-0 last:pb-0">
+                            {/* Meta Metrics Bar */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-150 text-xs">
+                              <div>
+                                <span className="block text-[9px] text-gray-400 font-bold uppercase">Showtime</span>
+                                <span className="font-bold text-gray-700">{new Date(show.startTime).toLocaleString()}</span>
+                              </div>
+                              <div>
+                                <span className="block text-[9px] text-gray-400 font-bold uppercase">Venue</span>
+                                <span className="font-bold text-gray-700">{show.venueName}</span>
+                              </div>
+                              <div>
+                                <span className="block text-[9px] text-gray-400 font-bold uppercase">Seating Fill Rate</span>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <div className="flex-1 h-2.5 bg-gray-200 rounded-full overflow-hidden">
+                                    <div className="h-full bg-indigo-650 rounded-full" style={{ width: `${percentFilled}%` }} />
+                                  </div>
+                                  <span className="font-mono font-bold text-[10px] whitespace-nowrap">
+                                    {show.bookedSeats}/{show.totalSeats} ({percentFilled.toFixed(0)}%)
+                                  </span>
+                                </div>
+                              </div>
+                              <div>
+                                <span className="block text-[9px] text-gray-400 font-bold uppercase">Revenue Earned</span>
+                                <span className="font-black text-emerald-650 text-sm mt-0.5 block">${show.revenue.toFixed(2)}</span>
+                              </div>
+                            </div>
+
+                            {/* Booking Timeline Simple Table / Visual Chart */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                              {/* Booking List Table */}
+                              <div>
+                                <h4 className="font-bold text-gray-700 text-xs mb-2">Bookings History</h4>
+                                {show.timeline.length === 0 ? (
+                                  <div className="py-12 text-center text-xs text-gray-400 bg-gray-50 border border-dashed rounded-lg">
+                                    No ticket purchases logged yet.
+                                  </div>
+                                ) : (
+                                  <div className="max-h-56 overflow-y-auto border border-gray-200 rounded-lg">
+                                    <table className="min-w-full divide-y divide-gray-255 text-left text-xs">
+                                      <thead className="bg-gray-105 text-[10px] text-gray-500 font-bold uppercase">
+                                        <tr>
+                                          <th className="px-3 py-2">Date/Time</th>
+                                          <th className="px-3 py-2 text-center">Tickets</th>
+                                          <th className="px-3 py-2 text-right">Paid</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-gray-200 text-gray-750">
+                                        {show.timeline.map((item: any, idx: number) => (
+                                          <tr key={idx} className="hover:bg-gray-50/50">
+                                            <td className="px-3 py-2 whitespace-nowrap">{new Date(item.date).toLocaleString()}</td>
+                                            <td className="px-3 py-2 text-center font-bold">{item.ticketsCount}</td>
+                                            <td className="px-3 py-2 text-right text-emerald-600 font-bold">${item.amount.toFixed(2)}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Sales Daily Visual Column Chart */}
+                              <div>
+                                <h4 className="font-bold text-gray-700 text-xs mb-2">Daily Tickets Sold Trend</h4>
+                                {dailyTimeline.length === 0 ? (
+                                  <div className="py-12 text-center text-xs text-gray-400 bg-gray-50 border border-dashed rounded-lg">
+                                    No sales history to visualize.
+                                  </div>
+                                ) : (
+                                  <div className="border border-gray-200 rounded-lg p-4 bg-gray-50/50 flex flex-col justify-between h-56">
+                                    {/* Chart Bars */}
+                                    <div className="flex-1 flex items-end gap-3 pb-2 pt-4">
+                                      {dailyTimeline.map((day: any, idx: number) => {
+                                        const barHeightPercent = (day.count / maxDailySales) * 100;
+                                        return (
+                                          <div key={idx} className="flex-1 flex flex-col items-center group relative cursor-pointer">
+                                            {/* Hover Tooltip */}
+                                            <div className="absolute bottom-full mb-1.5 hidden group-hover:block bg-gray-800 text-white text-[9px] font-bold py-1 px-2 rounded shadow-lg whitespace-nowrap z-10">
+                                              <span>{day.date}</span>
+                                              <span className="block text-indigo-300">{day.count} tickets sold</span>
+                                              <span className="block text-emerald-300">${day.revenue.toFixed(2)} revenue</span>
+                                            </div>
+                                            {/* Bar */}
+                                            <div
+                                              className="w-full bg-indigo-600 hover:bg-indigo-700 rounded-t-md transition-all shadow-sm"
+                                              style={{ height: `${Math.max(12, barHeightPercent)}%` }}
+                                            />
+                                            {/* Bar Label (Ticket Count) */}
+                                            <span className="text-[9px] font-bold text-gray-700 mt-1">{day.count}</span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                    {/* X-Axis labels */}
+                                    <div className="border-t border-gray-200 pt-1.5 flex justify-between text-[9px] text-gray-400 font-bold">
+                                      <span>{dailyTimeline[0]?.date}</span>
+                                      <span>{dailyTimeline[dailyTimeline.length - 1]?.date}</span>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* SECTION 3: Create Event Form */}
+        {panelMode === 'listings' && isCreatingEvent && (
           <form onSubmit={handleCreateEvent} className="space-y-6 max-w-2xl">
             <h3 className="text-lg font-bold text-gray-800 pb-2 border-b border-gray-100">
               Create Event Listing
@@ -483,8 +704,8 @@ export default function OrganiserPanel() {
           </form>
         )}
 
-        {/* SECTION 3: Edit Event Form */}
-        {isEditingEvent && selectedEvent && (
+        {/* SECTION 4: Edit Event Form */}
+        {panelMode === 'listings' && isEditingEvent && selectedEvent && (
           <form onSubmit={handleUpdateEvent} className="space-y-6 max-w-2xl">
             <h3 className="text-lg font-bold text-gray-800 pb-2 border-b border-gray-100">
               Edit Event Listing: {selectedEvent.title}
@@ -555,10 +776,10 @@ export default function OrganiserPanel() {
                           step="0.01"
                           value={categoryPrices[sp.seatCategoryId] || ''}
                           onChange={(e) =>
-                            setCategoryPrices({
-                              ...categoryPrices,
-                              [sp.seatCategoryId]: e.target.value,
-                            })
+                              setCategoryPrices({
+                                ...categoryPrices,
+                                [sp.seatCategoryId]: e.target.value,
+                              })
                           }
                           className="mt-1 block w-full rounded border border-gray-300 px-3 py-2 text-xs"
                           required

@@ -248,3 +248,88 @@ export const updateListing = async (req: AuthenticatedRequest, res: Response): P
     res.status(500).json({ error: { message: error.message || 'Internal server error updating listing', status: 500 } });
   }
 };
+
+export const getDashboardMetrics = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  if (!req.user) {
+    res.status(401).json({ error: { message: 'Unauthorized', status: 401 } });
+    return;
+  }
+
+  const organiserId = req.user.id;
+
+  try {
+    const events = await prisma.event.findMany({
+      where: { organiserId },
+      include: {
+        shows: {
+          include: {
+            venue: { select: { name: true } },
+            showPrices: true,
+            showSeats: {
+              select: {
+                status: true,
+                seat: { select: { seatCategoryId: true } },
+              },
+            },
+            bookings: {
+              where: { status: 'CONFIRMED' },
+              select: {
+                createdAt: true,
+                totalAmount: true,
+                showSeats: { select: { id: true } },
+              },
+              orderBy: { createdAt: 'asc' },
+            },
+          },
+        },
+      },
+    });
+
+    const metrics = events.map((event) => {
+      const showMetrics = event.shows.map((show) => {
+        const priceMap: { [catId: string]: number } = {};
+        show.showPrices.forEach((sp) => {
+          priceMap[sp.seatCategoryId] = Number(sp.price);
+        });
+
+        const totalSeats = show.showSeats.length;
+        const bookedSeats = show.showSeats.filter((ss) => ss.status === 'BOOKED').length;
+
+        let totalRevenue = 0;
+        show.showSeats.forEach((ss) => {
+          if (ss.status === 'BOOKED') {
+            totalRevenue += priceMap[ss.seat.seatCategoryId] || 0;
+          }
+        });
+
+        const bookingTimeline = show.bookings.map((b) => ({
+          date: b.createdAt.toISOString(),
+          amount: Number(b.totalAmount),
+          ticketsCount: b.showSeats.length,
+        }));
+
+        return {
+          id: show.id,
+          startTime: show.startTime.toISOString(),
+          venueName: show.venue.name,
+          totalSeats,
+          bookedSeats,
+          revenue: totalRevenue,
+          timeline: bookingTimeline,
+        };
+      });
+
+      return {
+        eventId: event.id,
+        title: event.title,
+        type: event.type,
+        shows: showMetrics,
+      };
+    });
+
+    res.status(200).json({ metrics });
+  } catch (error) {
+    console.error('[Organiser Dashboard] Metrics error:', error);
+    res.status(500).json({ error: { message: 'Internal server error retrieving metrics', status: 500 } });
+  }
+};

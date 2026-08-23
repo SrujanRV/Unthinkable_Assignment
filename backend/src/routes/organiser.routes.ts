@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createListing, listMyEvents, updateListing } from '../controllers/organiser.controller';
+import { createListing, listMyEvents, updateListing, getDashboardMetrics } from '../controllers/organiser.controller';
 import { authenticateJWT, requireRoles } from '../middlewares/auth.middleware';
 import { Role } from '@prisma/client';
 
@@ -12,5 +12,6 @@ router.use(requireRoles([Role.ORGANISER]) as any);
 router.post('/events', createListing as any);
 router.get('/events', listMyEvents as any);
 router.put('/events/:eventId', updateListing as any);
+router.get('/metrics', getDashboardMetrics as any);
 
 export default router;
