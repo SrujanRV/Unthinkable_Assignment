@@ -11,7 +11,7 @@ import { LogOut, User, Activity, Shield, LayoutGrid, Music, Ticket, Clock } from
 import axios from 'axios';
 
 function MainContent() {
-  const { isAuthenticated, user, logout, loading, globalHold, setGlobalHold, setSelectedShow } = useAuth();
+  const { isAuthenticated, user, logout, loading, globalHold, setGlobalHold, selectedShow, setSelectedShow } = useAuth();
   const [isLoginView, setIsLoginView] = useState(true);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'admin' | 'organiser' | 'health' | 'bookings'>('dashboard');
 
@@ -276,7 +276,7 @@ function MainContent() {
       </main>
 
       {/* Global Hold Pop-up / Banner */}
-      {globalHold && (
+      {globalHold && (!selectedShow || selectedShow.showId !== globalHold.showId || activeTab !== 'dashboard') && (
         <div className="fixed bottom-4 right-4 z-50 max-w-sm w-full bg-amber-50 border border-amber-300 rounded-xl shadow-lg p-4">
           <div className="flex items-start gap-3">
             <Clock className="w-5 h-5 text-amber-600 mt-0.5 animate-pulse flex-shrink-0" />

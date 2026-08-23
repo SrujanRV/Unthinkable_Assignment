@@ -43,6 +43,11 @@ const BACKEND_URL = 'http://localhost:5000';
 export default function SeatMap({ showId, eventId, venueName, onBack }: SeatMapProps) {
   const { user, token, setGlobalHold } = useAuth();
 
+  const userRef = useRef(user);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
   const [seats, setSeats] = useState<Seat[]>([]);
   const [showPrices, setShowPrices] = useState<{ [catId: string]: number }>({});
   const [loading, setLoading] = useState(true);
@@ -120,7 +125,7 @@ export default function SeatMap({ showId, eventId, venueName, onBack }: SeatMapP
         ),
       );
       // Deselect any seat that just got taken by someone else
-      if (data.status !== 'AVAILABLE' && data.heldByUserId !== user?.id) {
+      if (data.status !== 'AVAILABLE' && data.heldByUserId !== userRef.current?.id) {
         setSelectedSeatIds((prev) => prev.filter((id) => id !== data.seatId));
       }
     });
