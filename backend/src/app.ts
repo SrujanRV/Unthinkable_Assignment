@@ -4,6 +4,8 @@ import dotenv from 'dotenv';
 import healthRoutes from './routes/health.routes';
 import authRoutes from './routes/auth.routes';
 import adminRoutes from './routes/admin.routes';
+import organiserRoutes from './routes/organiser.routes';
+import generalRoutes from './routes/general.routes';
 import { errorHandler } from './middlewares/error.middleware';
 
 // Load environment variables
@@ -25,6 +27,8 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/health', healthRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/organiser', organiserRoutes);
+app.use('/api', generalRoutes);
 
 // Catch-all 404
 app.use((req, res, next) => {

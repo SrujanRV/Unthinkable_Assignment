@@ -4,20 +4,24 @@ import LoginPage from './components/LoginPage';
 import RegisterPage from './components/RegisterPage';
 import HealthDashboard from './components/HealthDashboard';
 import AdminPanel from './components/AdminPanel';
-import { LogOut, User, Activity, Shield, LayoutGrid } from 'lucide-react';
+import OrganiserPanel from './components/OrganiserPanel';
+import { LogOut, User, Activity, Shield, LayoutGrid, Music } from 'lucide-react';
 
 function MainContent() {
   const { isAuthenticated, user, logout, loading } = useAuth();
   const [isLoginView, setIsLoginView] = useState(true);
   const [showHealth, setShowHealth] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'admin' | 'health'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'admin' | 'organiser' | 'health'>('dashboard');
 
   const isAdmin = user?.role === 'ADMIN';
+  const isOrganiser = user?.role === 'ORGANISER';
 
-  // Set default tab for admin on authentication
+  // Set default tab on authentication
   useState(() => {
     if (user?.role === 'ADMIN') {
       setActiveTab('admin');
+    } else if (user?.role === 'ORGANISER') {
+      setActiveTab('organiser');
     }
   });
 
@@ -84,7 +88,7 @@ function MainContent() {
               <span className="font-extrabold text-gray-900 text-lg">Antigravity Tickets</span>
             </div>
 
-            {/* Navigation Tabs (only for Admin/Organiser features) */}
+            {/* Navigation Tabs */}
             <nav className="hidden sm:flex space-x-2">
               {isAdmin && (
                 <button
@@ -97,6 +101,19 @@ function MainContent() {
                 >
                   <Shield className="w-4 h-4" />
                   Admin Panel
+                </button>
+              )}
+              {isOrganiser && (
+                <button
+                  onClick={() => setActiveTab('organiser')}
+                  className={`flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg transition-colors focus:outline-none ${
+                    activeTab === 'organiser'
+                      ? 'bg-indigo-50 text-indigo-700'
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  }`}
+                >
+                  <Music className="w-4 h-4" />
+                  Organiser Panel
                 </button>
               )}
               <button
@@ -152,6 +169,12 @@ function MainContent() {
           </div>
         )}
 
+        {activeTab === 'organiser' && isOrganiser && (
+          <div className="space-y-6">
+            <OrganiserPanel />
+          </div>
+        )}
+
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 text-center sm:text-left">
@@ -160,6 +183,8 @@ function MainContent() {
                 You are logged in as <strong className="text-indigo-600 uppercase">{user?.role}</strong>.
                 {isAdmin ? (
                   <span> Use the tabs above to manage venues and layouts, or check system logs.</span>
+                ) : isOrganiser ? (
+                  <span> Use the Organiser Panel to list new events and manage tickets pricing.</span>
                 ) : (
                   <span> Welcome to the ticketing platform! The event listing and bookings will be available here.</span>
                 )}
