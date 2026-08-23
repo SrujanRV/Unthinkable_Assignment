@@ -12,7 +12,6 @@ import { LogOut, User, Activity, Shield, LayoutGrid, Music, Ticket } from 'lucid
 function MainContent() {
   const { isAuthenticated, user, logout, loading } = useAuth();
   const [isLoginView, setIsLoginView] = useState(true);
-  const [showHealth, setShowHealth] = useState(false);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'admin' | 'organiser' | 'health' | 'bookings'>('dashboard');
 
   const isAdmin = user?.role === 'ADMIN';
@@ -62,25 +61,11 @@ function MainContent() {
             <RegisterPage onToggleMode={() => setIsLoginView(true)} />
           )}
         </div>
-
-        {/* Toggleable Health status during login */}
-        <div className="sm:mx-auto sm:w-full sm:max-w-xl text-center">
-          <button
-            onClick={() => setShowHealth(!showHealth)}
-            className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-indigo-600 transition-colors focus:outline-none"
-          >
-            <Activity className="w-3.5 h-3.5" />
-            {showHealth ? 'Hide Connection Health' : 'Show Connection Health'}
-          </button>
-          {showHealth && (
-            <div className="mt-4 text-left">
-              <HealthDashboard />
-            </div>
-          )}
-        </div>
       </div>
     );
   }
+
+  const isCustomer = user?.role === 'CUSTOMER';
 
   // Logged-in View
   return (
@@ -133,30 +118,35 @@ function MainContent() {
                 <LayoutGrid className="w-4 h-4" />
                 Dashboard
               </button>
-              <button
-                onClick={() => setActiveTab('bookings')}
-                className={`flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg transition-colors focus:outline-none ${
-                  activeTab === 'bookings'
-                    ? 'bg-indigo-50 text-indigo-700'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                }`}
-              >
-                <Ticket className="w-4 h-4" />
-                My Bookings
-              </button>
-              <button
-                onClick={() => setActiveTab('health')}
-                className={`flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg transition-colors focus:outline-none ${
-                  activeTab === 'health'
-                    ? 'bg-indigo-50 text-indigo-700'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                }`}
-              >
-                <Activity className="w-4 h-4" />
-                System Health
-              </button>
+              {isCustomer && (
+                <button
+                  onClick={() => setActiveTab('bookings')}
+                  className={`flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg transition-colors focus:outline-none ${
+                    activeTab === 'bookings'
+                      ? 'bg-indigo-50 text-indigo-700'
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  }`}
+                >
+                  <Ticket className="w-4 h-4" />
+                  My Bookings
+                </button>
+              )}
+              {isAdmin && (
+                <button
+                  onClick={() => setActiveTab('health')}
+                  className={`flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg transition-colors focus:outline-none ${
+                    activeTab === 'health'
+                      ? 'bg-indigo-50 text-indigo-700'
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  }`}
+                >
+                  <Activity className="w-4 h-4" />
+                  System Health
+                </button>
+              )}
             </nav>
           </div>
+
 
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 text-sm text-gray-700 bg-gray-100 px-3 py-1.5 rounded-lg border border-gray-200">
@@ -211,15 +201,15 @@ function MainContent() {
           </div>
         )}
 
-        {activeTab === 'bookings' && (
+        {activeTab === 'bookings' && isCustomer && (
           <div className="space-y-6">
             <MyBookings />
           </div>
         )}
 
-        {activeTab === 'health' && (
+        {activeTab === 'health' && isAdmin && (
           <div>
-            <div className="border-b border-gray-200 pb-3 mb-6">
+            <div className="border-b border-gray-250 pb-3 mb-6">
               <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-1.5">
                 <Activity className="w-5 h-5 text-indigo-500" />
                 Service Health Metrics

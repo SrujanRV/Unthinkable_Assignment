@@ -1,8 +1,12 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from '../context/AuthContext';
-import { Clock, ShoppingCart, UserCheck, ShieldAlert, Loader, Trash2, CheckCircle2, Mail, ExternalLink, Users } from 'lucide-react';
+import {
+  Clock, ShoppingCart, UserCheck, ShieldAlert, Loader,
+  Trash2, CheckCircle2, Mail, ExternalLink, Users,
+  AlertTriangle, CreditCard,
+} from 'lucide-react';
 
 interface Seat {
   id: string;
@@ -32,220 +36,223 @@ interface BookingResult {
   qrCodeDataUrl: string;
 }
 
+type View = 'map' | 'checkout' | 'success';
+
 const BACKEND_URL = 'http://localhost:5000';
 
 export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
   const { user, token } = useAuth();
+
   const [seats, setSeats] = useState<Seat[]>([]);
-  const [selectedSeatIds, setSelectedSeatIds] = useState<string[]>([]);
-  const [myHeldSeatIds, setMyHeldSeatIds] = useState<string[]>([]);
-  const [holdExpiresAt, setHoldExpiresAt] = useState<string | null>(null);
-  const [countdown, setCountdown] = useState<number>(0);
-  
-  const [bookingResult, setBookingResult] = useState<BookingResult | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [showPrices, setShowPrices] = useState<{ [catId: string]: number }>({});
-  
+  const [loading, setLoading] = useState(true);
+
+  // Client-side only selection — no server hold until "Proceed to Booking"
+  const [selectedSeatIds, setSelectedSeatIds] = useState<string[]>([]);
+
+  // Server-confirmed hold state
+  const [heldSeatIds, setHeldSeatIds] = useState<string[]>([]);
+  const [heldUntil, setHeldUntil] = useState<string | null>(null); // ISO timestamp from server
+  const [countdown, setCountdown] = useState(0);
+
+  const [view, setView] = useState<View>('map');
+  const [error, setError] = useState<string | null>(null);
+  const [conflictMsg, setConflictMsg] = useState<string | null>(null);
+  const [bookingResult, setBookingResult] = useState<BookingResult | null>(null);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+
   const socketRef = useRef<Socket | null>(null);
-  const myHeldSeatIdsRef = useRef<string[]>([]);
+  const heldSeatIdsRef = useRef<string[]>([]);
 
-  // Keep ref in sync for unmount cleanup
-  useEffect(() => {
-    myHeldSeatIdsRef.current = myHeldSeatIds;
-  }, [myHeldSeatIds]);
+  useEffect(() => { heldSeatIdsRef.current = heldSeatIds; }, [heldSeatIds]);
 
-  // Fetch seat map details and pricing
-  const fetchSeatMap = async () => {
+  // ── Fetch seat map + pricing ──────────────────────────────────────────────
+  const fetchSeatMap = useCallback(async () => {
     try {
-      const seatsRes = await axios.get<{ seats: Seat[] }>(`/api/shows/${showId}/seats`);
+      const [seatsRes, showRes] = await Promise.all([
+        axios.get<{ seats: Seat[] }>(`/api/shows/${showId}/seats`),
+        axios.get<{ show: any }>(`/api/shows/${showId}`),
+      ]);
       const allSeats = seatsRes.data.seats;
       setSeats(allSeats);
 
-      // Pre-select seats held by me on mount (waitlist claims auto-activation)
-      const heldByMe = allSeats.filter((s) => s.status === 'HELD' && s.heldByUserId === user?.id);
-      if (heldByMe.length > 0) {
-        setMyHeldSeatIds(heldByMe.map((s) => s.seatId));
-        // Set hold expiry to the earliest held seat
-        const earliestExpiry = heldByMe.reduce((earliest, current) => {
-          if (!earliest.heldUntil) return current;
-          if (!current.heldUntil) return earliest;
-          return new Date(current.heldUntil) < new Date(earliest.heldUntil) ? current : earliest;
-        });
-        setHoldExpiresAt(earliestExpiry.heldUntil);
-      }
-
-      const showRes = await axios.get<{ show: any }>(`/api/shows/${showId}`);
       const prices: { [catId: string]: number } = {};
       showRes.data.show.showPrices.forEach((sp: any) => {
         prices[sp.seatCategoryId] = Number(sp.price);
       });
       setShowPrices(prices);
+
+      // Restore hold state if navigating back mid-hold (e.g. waitlist claim)
+      const heldByMe = allSeats.filter(
+        (s) => s.status === 'HELD' && s.heldByUserId === user?.id,
+      );
+      if (heldByMe.length > 0 && heldSeatIdsRef.current.length === 0) {
+        const earliest = heldByMe.reduce((a, b) =>
+          !a.heldUntil ? b : !b.heldUntil ? a :
+          new Date(a.heldUntil) < new Date(b.heldUntil) ? a : b,
+        );
+        setHeldSeatIds(heldByMe.map((s) => s.seatId));
+        setHeldUntil(earliest.heldUntil);
+        setView('checkout');
+      }
     } catch (err: any) {
       setError(err.response?.data?.error?.message || 'Failed to load seating map');
     } finally {
       setLoading(false);
     }
-  };
+  }, [showId, user?.id]);
 
+  // ── Socket.io + initial fetch ─────────────────────────────────────────────
   useEffect(() => {
     fetchSeatMap();
 
-    const socket = io(BACKEND_URL, {
-      auth: { token },
-    });
+    const socket = io(BACKEND_URL, { auth: { token } });
     socketRef.current = socket;
-
-    socket.on('connect', () => {
-      socket.emit('joinShow', showId);
+    socket.on('connect', () => socket.emit('joinShow', showId));
+    socket.on('seatStatusUpdate', (data: {
+      seatId: string; status: 'AVAILABLE' | 'HELD' | 'BOOKED';
+      heldByUserId: string | null; heldUntil: string | null;
+    }) => {
+      setSeats((prev) =>
+        prev.map((s) => s.seatId === data.seatId
+          ? { ...s, status: data.status, heldByUserId: data.heldByUserId, heldUntil: data.heldUntil }
+          : s,
+        ),
+      );
+      // Deselect any seat that just got taken by someone else
+      if (data.status !== 'AVAILABLE' && data.heldByUserId !== user?.id) {
+        setSelectedSeatIds((prev) => prev.filter((id) => id !== data.seatId));
+      }
     });
-
-    socket.on(
-      'seatStatusUpdate',
-      (data: { seatId: string; status: 'AVAILABLE' | 'HELD' | 'BOOKED'; heldByUserId: string | null; heldUntil: string | null }) => {
-        setSeats((prevSeats) =>
-          prevSeats.map((seat) =>
-            seat.seatId === data.seatId
-              ? {
-                  ...seat,
-                  status: data.status,
-                  heldByUserId: data.heldByUserId,
-                  heldUntil: data.heldUntil,
-                }
-              : seat,
-          ),
-        );
-      },
-    );
 
     return () => {
-      // Release active holds on unmount
-      const held = myHeldSeatIdsRef.current;
+      const held = heldSeatIdsRef.current;
       if (held.length > 0) {
-        axios.post(`/api/shows/${showId}/release`, { seatIds: held }).catch((err) => {
-          console.error('[Cleanup] Failed to release holds on unmount:', err);
-        });
+        axios.post(`/api/shows/${showId}/release`, { seatIds: held }).catch(() => {});
       }
-
-      if (socketRef.current) {
-        socketRef.current.emit('leaveShow', showId);
-        socketRef.current.disconnect();
-      }
+      socket.emit('leaveShow', showId);
+      socket.disconnect();
     };
   }, [showId, token]);
 
-  // Countdown timer effect
+  // ── Countdown — derived from server heldUntil, NOT from page-load time ────
+  const handleExpiry = useCallback(async () => {
+    const held = heldSeatIdsRef.current;
+    if (held.length > 0) {
+      await axios.post(`/api/shows/${showId}/release`, { seatIds: held }).catch(() => {});
+    }
+    setHeldSeatIds([]);
+    setHeldUntil(null);
+    setSelectedSeatIds([]);
+    setView('map');
+    setError('Your seat hold expired. The seats have been released — please reselect.');
+    fetchSeatMap();
+  }, [showId, fetchSeatMap]);
+
   useEffect(() => {
-    if (!holdExpiresAt) {
-      setCountdown(0);
-      return;
-    }
-
-    const updateCountdown = () => {
-      const remaining = Math.max(0, Math.floor((new Date(holdExpiresAt).getTime() - Date.now()) / 1000));
+    if (!heldUntil) { setCountdown(0); return; }
+    const tick = () => {
+      const remaining = Math.max(
+        0,
+        Math.floor((new Date(heldUntil).getTime() - Date.now()) / 1000),
+      );
       setCountdown(remaining);
-
-      if (remaining === 0) {
-        setMyHeldSeatIds([]);
-        setHoldExpiresAt(null);
-        setError('Your seat holds have expired. The seats have been released.');
-        fetchSeatMap();
-      }
+      if (remaining === 0) handleExpiry();
     };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [heldUntil, handleExpiry]);
 
-    updateCountdown();
-    const interval = setInterval(updateCountdown, 1000);
-
-    return () => clearInterval(interval);
-  }, [holdExpiresAt]);
-
+  // ── Seat click — client-side toggle ONLY, no backend call ────────────────
   const handleSeatClick = (seat: Seat) => {
-    const isHeldByMe = seat.status === 'HELD' && seat.heldByUserId === user?.id;
-    const isAvailable = seat.status === 'AVAILABLE';
-
-    if (!isAvailable && !isHeldByMe) return;
-
-    if (myHeldSeatIds.includes(seat.seatId)) {
-      handleReleaseIndividualSeat(seat.seatId);
-      return;
-    }
-
+    if (view !== 'map') return;
+    if (seat.status === 'BOOKED') return;
+    if (seat.status === 'HELD' && seat.heldByUserId !== user?.id) return;
+    setConflictMsg(null);
     setSelectedSeatIds((prev) =>
-      prev.includes(seat.seatId) ? prev.filter((id) => id !== seat.seatId) : [...prev, seat.seatId],
+      prev.includes(seat.seatId)
+        ? prev.filter((id) => id !== seat.seatId)
+        : [...prev, seat.seatId],
     );
   };
 
-  const handleHoldSeats = async () => {
+  // ── Proceed to Booking — all-or-nothing hold POST ────────────────────────
+  const handleProceedToBooking = async () => {
     if (selectedSeatIds.length === 0) return;
     setLoading(true);
+    setConflictMsg(null);
     setError(null);
     try {
-      const res = await axios.post<{ heldUntil: string }>(`/api/shows/${showId}/hold`, {
-        seatIds: selectedSeatIds,
-      });
-      setMyHeldSeatIds(selectedSeatIds);
-      setHoldExpiresAt(res.data.heldUntil);
-      setSelectedSeatIds([]);
-      fetchSeatMap();
-    } catch (err: any) {
-      setError(err.response?.data?.error?.message || 'Failed to lock seats.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleReleaseHolds = async () => {
-    if (myHeldSeatIds.length === 0) return;
-    setLoading(true);
-    setError(null);
-    try {
-      await axios.post(`/api/shows/${showId}/release`, {
-        seatIds: myHeldSeatIds,
-      });
-      setMyHeldSeatIds([]);
-      setHoldExpiresAt(null);
-      fetchSeatMap();
-    } catch (err: any) {
-      setError('Failed to release holds');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleReleaseIndividualSeat = async (seatId: string) => {
-    try {
-      await axios.post(`/api/shows/${showId}/release`, {
-        seatIds: [seatId],
-      });
-      setMyHeldSeatIds((prev) => prev.filter((id) => id !== seatId));
-      if (myHeldSeatIds.length <= 1) {
-        setHoldExpiresAt(null);
-      }
-      fetchSeatMap();
-    } catch (err) {
-      console.error('Error releasing seat:', err);
-    }
-  };
-
-  const handleCheckout = async () => {
-    if (myHeldSeatIds.length === 0) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await axios.post<{ booking: BookingResult }>(`/api/shows/${showId}/checkout`, {
-        seatIds: myHeldSeatIds,
-      });
-      setBookingResult(res.data.booking);
-      setMyHeldSeatIds([]);
-      setHoldExpiresAt(null);
-    } catch (err: any) {
-      setError(
-        err.response?.data?.error?.message ||
-        'Checkout failed. Your seat holds may have expired.'
+      const res = await axios.post<{ heldUntil: string }>(
+        `/api/shows/${showId}/hold`,
+        { seatIds: selectedSeatIds },
       );
+      // Every seat in the batch was atomically locked on the server
+      setHeldSeatIds(selectedSeatIds);
+      setHeldUntil(res.data.heldUntil);
+      setSelectedSeatIds([]);
+      setView('checkout');
       fetchSeatMap();
+    } catch (err: any) {
+      if (err.response?.status === 409) {
+        const { conflictingSeatIds, message } = err.response.data.error;
+        // Deselect contested seats and mark them held locally
+        setSelectedSeatIds((prev) => prev.filter((id) => !conflictingSeatIds.includes(id)));
+        setSeats((prev) =>
+          prev.map((s) => conflictingSeatIds.includes(s.seatId) ? { ...s, status: 'HELD' } : s),
+        );
+        setConflictMsg(message);
+      } else {
+        setError(err.response?.data?.error?.message || 'Failed to hold seats. Please try again.');
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ── Cancel hold — immediate server release, back to map ──────────────────
+  const handleCancelHold = async () => {
+    if (heldSeatIds.length === 0) return;
+    setLoading(true);
+    try {
+      await axios.post(`/api/shows/${showId}/release`, { seatIds: heldSeatIds });
+      setHeldSeatIds([]);
+      setHeldUntil(null);
+      setView('map');
+      fetchSeatMap();
+    } catch {
+      setError('Failed to release holds. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── Confirm Booking — checkout ────────────────────────────────────────────
+  const handleConfirmBooking = async () => {
+    if (heldSeatIds.length === 0) return;
+    setCheckoutLoading(true);
+    setError(null);
+    try {
+      const res = await axios.post<{ booking: BookingResult }>(
+        `/api/shows/${showId}/checkout`,
+        { seatIds: heldSeatIds },
+      );
+      setBookingResult(res.data.booking);
+      setHeldSeatIds([]);
+      setHeldUntil(null);
+      setView('success');
+    } catch (err: any) {
+      const msg = err.response?.data?.error?.message || 'Checkout failed. Your hold may have expired.';
+      setError(msg);
+      if (err.response?.status === 400) {
+        setHeldSeatIds([]);
+        setHeldUntil(null);
+        setView('map');
+        fetchSeatMap();
+      }
+    } finally {
+      setCheckoutLoading(false);
     }
   };
 
@@ -255,9 +262,9 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
     try {
       const res = await axios.post<{ message: string; waitlistEntry: { position: number } }>(
         `/api/shows/${showId}/waitlist`,
-        { seatCategoryId: catId }
+        { seatCategoryId: catId },
       );
-      alert(`Success! Joined queue. Your position in waitlist is #${res.data.waitlistEntry.position}.`);
+      alert(`Joined waitlist! Your position: #${res.data.waitlistEntry.position}`);
     } catch (err: any) {
       setError(err.response?.data?.error?.message || 'Failed to join waitlist.');
     } finally {
@@ -271,95 +278,68 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  // Group seats by row to render layout
+  const getPrice = (seatId: string) => {
+    const seat = seats.find((s) => s.seatId === seatId);
+    return seat ? showPrices[seat.categoryId] || 0 : 0;
+  };
+  const getTotalPrice = (ids: string[]) => ids.reduce((sum, id) => sum + getPrice(id), 0);
+
+  // ── Grid helpers ──────────────────────────────────────────────────────────
   const rows: { [row: string]: Seat[] } = {};
   seats.forEach((seat) => {
-    if (!rows[seat.row]) {
-      rows[seat.row] = [];
-    }
+    if (!rows[seat.row]) rows[seat.row] = [];
     rows[seat.row].push(seat);
   });
-
   const sortedRows = Object.keys(rows).sort();
-  sortedRows.forEach((rowKey) => {
-    rows[rowKey].sort((a, b) => a.number - b.number);
-  });
+  sortedRows.forEach((r) => rows[r].sort((a, b) => a.number - b.number));
 
-  // Calculate Sold out categories
   const categoryStatus: { [catId: string]: { name: string; availableCount: number } } = {};
   seats.forEach((seat) => {
-    if (!categoryStatus[seat.categoryId]) {
+    if (!categoryStatus[seat.categoryId])
       categoryStatus[seat.categoryId] = { name: seat.categoryName, availableCount: 0 };
-    }
-    const isAvailable = seat.status === 'AVAILABLE';
-    const isHeldByMe = (seat.status === 'HELD' && seat.heldByUserId === user?.id) || myHeldSeatIds.includes(seat.seatId);
-    if (isAvailable || isHeldByMe) {
+    if (seat.status === 'AVAILABLE' || (seat.status === 'HELD' && seat.heldByUserId === user?.id))
       categoryStatus[seat.categoryId].availableCount++;
-    }
   });
-
   const soldOutCategories = Object.keys(categoryStatus).filter(
-    (catId) => categoryStatus[catId].availableCount === 0
+    (id) => categoryStatus[id].availableCount === 0,
   );
 
-  // Distinct available-state colour palette per category (by order of first appearance)
   const CATEGORY_PALETTES = [
-    'bg-blue-500 border-blue-600 text-white hover:bg-blue-600',           // 1st cat → blue (standard)
-    'bg-violet-500 border-violet-600 text-white hover:bg-violet-600',     // 2nd cat → violet (premium)
-    'bg-yellow-400 border-yellow-500 text-gray-900 hover:bg-yellow-500',  // 3rd cat → gold (VIP)
-    'bg-teal-500 border-teal-600 text-white hover:bg-teal-600',           // 4th cat → teal (balcony)
-    'bg-rose-500 border-rose-600 text-white hover:bg-rose-600',           // 5th cat → rose
-    'bg-cyan-500 border-cyan-600 text-white hover:bg-cyan-600',           // 6th cat → cyan
-    'bg-fuchsia-500 border-fuchsia-600 text-white hover:bg-fuchsia-600',  // 7th cat → fuchsia
-    'bg-lime-500 border-lime-600 text-white hover:bg-lime-600',           // 8th cat → lime
+    'bg-blue-500 border-blue-600 text-white hover:bg-blue-600',
+    'bg-violet-500 border-violet-600 text-white hover:bg-violet-600',
+    'bg-yellow-400 border-yellow-500 text-gray-900 hover:bg-yellow-500',
+    'bg-teal-500 border-teal-600 text-white hover:bg-teal-600',
+    'bg-rose-500 border-rose-600 text-white hover:bg-rose-600',
+    'bg-cyan-500 border-cyan-600 text-white hover:bg-cyan-600',
+    'bg-fuchsia-500 border-fuchsia-600 text-white hover:bg-fuchsia-600',
+    'bg-lime-500 border-lime-600 text-white hover:bg-lime-600',
   ];
-
   const CATEGORY_LEGEND_COLORS = [
-    'bg-blue-500 border-blue-600',
-    'bg-violet-500 border-violet-600',
-    'bg-yellow-400 border-yellow-500',
-    'bg-teal-500 border-teal-600',
-    'bg-rose-500 border-rose-600',
-    'bg-cyan-500 border-cyan-600',
-    'bg-fuchsia-500 border-fuchsia-600',
-    'bg-lime-500 border-lime-600',
+    'bg-blue-500 border-blue-600', 'bg-violet-500 border-violet-600',
+    'bg-yellow-400 border-yellow-500', 'bg-teal-500 border-teal-600',
+    'bg-rose-500 border-rose-600', 'bg-cyan-500 border-cyan-600',
+    'bg-fuchsia-500 border-fuchsia-600', 'bg-lime-500 border-lime-600',
   ];
-
-  // Build stable categoryId → palette index sorted by first occurrence in seat list
   const categoryOrder: string[] = [];
-  seats.forEach((s) => {
-    if (!categoryOrder.includes(s.categoryId)) categoryOrder.push(s.categoryId);
-  });
-  const getCategoryPalette = (categoryId: string) =>
-    CATEGORY_PALETTES[categoryOrder.indexOf(categoryId) % CATEGORY_PALETTES.length];
-  const getCategoryLegendColor = (categoryId: string) =>
-    CATEGORY_LEGEND_COLORS[categoryOrder.indexOf(categoryId) % CATEGORY_LEGEND_COLORS.length];
+  seats.forEach((s) => { if (!categoryOrder.includes(s.categoryId)) categoryOrder.push(s.categoryId); });
+  const getCategoryPalette = (catId: string) =>
+    CATEGORY_PALETTES[categoryOrder.indexOf(catId) % CATEGORY_PALETTES.length];
+  const getCategoryLegendColor = (catId: string) =>
+    CATEGORY_LEGEND_COLORS[categoryOrder.indexOf(catId) % CATEGORY_LEGEND_COLORS.length];
 
   const getSeatColor = (seat: Seat) => {
     const isSelected = selectedSeatIds.includes(seat.seatId);
-    const isHeldByMe = (seat.status === 'HELD' && seat.heldByUserId === user?.id) || myHeldSeatIds.includes(seat.seatId);
-
-    if (isSelected) return 'bg-indigo-600 border-indigo-700 text-white hover:bg-indigo-700 scale-95';
+    const isHeldByMe = seat.status === 'HELD' && seat.heldByUserId === user?.id;
+    if (isSelected) return 'bg-indigo-600 border-indigo-700 text-white scale-95';
     if (seat.status === 'BOOKED') return 'bg-red-500 border-red-600 text-white cursor-not-allowed opacity-80';
     if (seat.status === 'HELD') {
-      if (isHeldByMe) return 'bg-amber-500 border-amber-600 text-white hover:bg-amber-600 animate-pulse';
+      if (isHeldByMe) return 'bg-amber-500 border-amber-600 text-white animate-pulse';
       return 'bg-gray-300 border-gray-400 text-gray-500 cursor-not-allowed';
     }
     return getCategoryPalette(seat.categoryId);
   };
 
-  const getSelectedSeatsPrice = () => {
-    let total = 0;
-    const activeIds = myHeldSeatIds.length > 0 ? myHeldSeatIds : selectedSeatIds;
-    activeIds.forEach((id) => {
-      const seat = seats.find((s) => s.seatId === id);
-      if (seat) {
-        total += showPrices[seat.categoryId] || 0;
-      }
-    });
-    return total;
-  };
-
+  // ── Loading ───────────────────────────────────────────────────────────────
   if (loading && seats.length === 0) {
     return (
       <div className="p-12 text-center">
@@ -369,8 +349,8 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
     );
   }
 
-  // Booking Success Screen Render
-  if (bookingResult) {
+  // ── SUCCESS VIEW ──────────────────────────────────────────────────────────
+  if (view === 'success' && bookingResult) {
     return (
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden max-w-md mx-auto my-8">
         <div className="bg-emerald-600 px-6 py-8 text-white text-center">
@@ -378,53 +358,32 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
           <h3 className="text-2xl font-bold">Booking Confirmed!</h3>
           <p className="text-xs text-emerald-100 mt-1">Thank you for booking with Antigravity Tickets</p>
         </div>
-
         <div className="p-6 space-y-6">
           <div className="space-y-3">
-            <div className="flex justify-between items-center text-xs text-gray-500 pb-2 border-b border-gray-100">
-              <span>Booking Reference</span>
-              <strong className="text-sm text-gray-800 font-mono">{bookingResult.bookingReference}</strong>
-            </div>
-            <div className="flex justify-between items-center text-xs text-gray-500 pb-2 border-b border-gray-100">
-              <span>Venue</span>
-              <strong className="text-sm text-gray-800">{venueName}</strong>
-            </div>
-            <div className="flex justify-between items-center text-xs text-gray-500 pb-2 border-b border-gray-100">
-              <span>Seats Booked</span>
-              <strong className="text-sm text-gray-800">{bookingResult.seats.join(', ')}</strong>
-            </div>
-            <div className="flex justify-between items-center text-xs text-gray-500 pb-2 border-b border-gray-100">
-              <span>Amount Paid</span>
-              <strong className="text-sm text-emerald-600 font-bold">${bookingResult.totalPrice.toFixed(2)}</strong>
-            </div>
+            {([
+              ['Booking Reference', <strong key="ref" className="font-mono">{bookingResult.bookingReference}</strong>],
+              ['Venue', venueName],
+              ['Seats Booked', bookingResult.seats.join(', ')],
+              ['Amount Paid', <strong key="amt" className="text-emerald-600">${bookingResult.totalPrice.toFixed(2)}</strong>],
+            ] as [string, React.ReactNode][]).map(([label, val], i) => (
+              <div key={i} className="flex justify-between items-center text-xs text-gray-500 pb-2 border-b border-gray-100">
+                <span>{label}</span><span className="text-sm text-gray-800">{val}</span>
+              </div>
+            ))}
           </div>
-
           <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl text-center space-y-2">
             <span className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Your Ticket QR Entry</span>
             <img src={bookingResult.qrCodeDataUrl} alt="Ticket QR Code" className="w-48 h-48 mx-auto border-2 border-white rounded shadow-sm" />
             <p className="text-[10px] text-gray-400">Scan this QR code at the event entrance.</p>
           </div>
-
           {bookingResult.emailPreviewUrl && (
-            <a
-              href={bookingResult.emailPreviewUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center justify-center gap-1.5 w-full py-2.5 bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 rounded-lg text-xs font-bold transition-colors"
-            >
-              <Mail className="w-4.5 h-4.5" />
-              View Sent Confirmation Email
-              <ExternalLink className="w-3.5 h-3.5" />
+            <a href={bookingResult.emailPreviewUrl} target="_blank" rel="noreferrer"
+              className="flex items-center justify-center gap-1.5 w-full py-2.5 bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 rounded-lg text-xs font-bold transition-colors">
+              <Mail className="w-4 h-4" /> View Confirmation Email <ExternalLink className="w-3.5 h-3.5" />
             </a>
           )}
-
-          <button
-            onClick={() => {
-              setBookingResult(null);
-              onBack();
-            }}
-            className="w-full py-2.5 bg-gray-800 hover:bg-gray-900 text-white rounded-lg font-bold text-xs shadow transition-colors"
-          >
+          <button onClick={() => { setView('map'); onBack(); }}
+            className="w-full py-2.5 bg-gray-800 hover:bg-gray-900 text-white rounded-lg font-bold text-xs shadow transition-colors">
             Back to Event Directory
           </button>
         </div>
@@ -432,71 +391,138 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
     );
   }
 
-  const activeSeatIds = myHeldSeatIds.length > 0 ? myHeldSeatIds : selectedSeatIds;
+  // ── CHECKOUT VIEW — Hold details + server-timestamp countdown ─────────────
+  if (view === 'checkout') {
+    const isExpiringSoon = countdown > 0 && countdown <= 60;
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden max-w-lg mx-auto my-8">
+        <div className="bg-indigo-900 px-6 py-4 text-white flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-bold flex items-center gap-2">
+              <CreditCard className="w-5 h-5" /> Confirm Your Booking
+            </h3>
+            <p className="text-xs text-indigo-200 mt-0.5">Complete before your hold expires</p>
+          </div>
+          {/* Countdown derived from server heldUntil — not page-load time */}
+          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-mono font-bold text-sm ${
+            isExpiringSoon
+              ? 'bg-red-600 border-red-500 text-white animate-pulse'
+              : 'bg-indigo-800 border-indigo-700 text-amber-300'
+          }`}>
+            <Clock className="w-4 h-4" />
+            {countdown > 0 ? formatTime(countdown) : 'Expired'}
+          </div>
+        </div>
 
+        <div className="p-6 space-y-5">
+          {error && (
+            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+              <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />{error}
+            </div>
+          )}
+          {isExpiringSoon && (
+            <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+              <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <span><strong>Hurry!</strong> Your hold expires in under a minute.</span>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">Held Seats</h4>
+            <div className="rounded-lg border border-gray-200 overflow-hidden">
+              {heldSeatIds.map((seatId) => {
+                const seat = seats.find((s) => s.seatId === seatId);
+                return (
+                  <div key={seatId} className="flex justify-between items-center px-4 py-2.5 border-b border-gray-100 last:border-0 text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-gray-800">Seat {seat?.row}{seat?.number}</span>
+                      <span className="text-[10px] bg-gray-100 text-gray-600 border border-gray-200 px-1.5 py-0.5 rounded uppercase font-semibold">{seat?.categoryName}</span>
+                    </div>
+                    <span className="font-bold text-indigo-600">${getPrice(seatId).toFixed(2)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="flex justify-between items-center pt-2 border-t border-gray-200 font-bold text-base text-gray-800">
+            <span>Total</span>
+            <span className="text-indigo-600 text-xl">${getTotalPrice(heldSeatIds).toFixed(2)}</span>
+          </div>
+
+          <div className="flex gap-3 pt-1">
+            <button onClick={handleCancelHold} disabled={loading || checkoutLoading}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg font-semibold text-sm transition-colors disabled:opacity-50">
+              <Trash2 className="w-4 h-4" /> Cancel Hold
+            </button>
+            <button onClick={handleConfirmBooking} disabled={loading || checkoutLoading || countdown === 0}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-sm shadow transition-colors disabled:opacity-50">
+              {checkoutLoading ? <Loader className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+              Confirm Booking
+            </button>
+          </div>
+
+          <div className="p-3 rounded-lg border border-amber-200 bg-amber-50 text-xs text-amber-800 flex items-start gap-2">
+            <ShieldAlert className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-500" />
+            <span><strong>Hold Policy:</strong> Your seats are server-locked for {formatTime(countdown)}. Cancelling immediately frees them for other users.</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── MAP VIEW — client-side selection only ─────────────────────────────────
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
       <div className="bg-indigo-900 px-6 py-4 text-white flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-bold flex items-center gap-2">🛋️ Seating Map Visualizer</h3>
-          <p className="text-xs text-indigo-200">Interactive live seat locking for {venueName}</p>
+          <h3 className="text-lg font-bold flex items-center gap-2">🛋️ Seating Map</h3>
+          <p className="text-xs text-indigo-200">Click seats to select — hold created only when you proceed</p>
         </div>
-        <button
-          onClick={onBack}
-          className="text-xs font-semibold px-3 py-1.5 bg-indigo-800 hover:bg-indigo-700 rounded-md border border-indigo-700 transition-colors"
-        >
+        <button onClick={onBack}
+          className="text-xs font-semibold px-3 py-1.5 bg-indigo-800 hover:bg-indigo-700 rounded-md border border-indigo-700 transition-colors">
           Back to Events
         </button>
       </div>
 
       <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Seat grid */}
         <div className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between mb-2">
             <h4 className="font-bold text-gray-800 text-sm">Select Your Seats</h4>
             <div className="text-xs text-gray-400 flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5" />
-              <span>Holds expire after 10 mins</span>
+              <Clock className="w-3.5 h-3.5" /><span>Hold created only when you proceed</span>
             </div>
           </div>
 
           <div className="p-8 border border-gray-200 rounded-xl bg-gray-900 overflow-x-auto min-h-[300px] flex flex-col items-center justify-center relative select-none">
-            <div className="w-2/3 h-2 bg-indigo-500/20 border-b border-indigo-500 shadow-[0_4px_12px_rgba(99,102,241,0.2)] rounded-full text-center text-[10px] text-indigo-300 font-bold uppercase tracking-widest pb-4 mb-10">
+            <div className="w-2/3 h-2 bg-indigo-500/20 border-b border-indigo-500 rounded-full text-center text-[10px] text-indigo-300 font-bold uppercase tracking-widest pb-4 mb-10">
               STAGE / SCREEN
             </div>
 
-            {error && (
-              <div className="p-3 mb-4 text-xs text-red-700 bg-red-50 rounded border border-red-200 w-full max-w-md">
-                {error}
+            {conflictMsg && (
+              <div className="flex items-start gap-2 p-3 mb-4 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg w-full max-w-md">
+                <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-500" />
+                <span>{conflictMsg} — contested seats have been deselected. Please choose alternatives.</span>
               </div>
+            )}
+            {error && (
+              <div className="p-3 mb-4 text-xs text-red-700 bg-red-50 rounded border border-red-200 w-full max-w-md">{error}</div>
             )}
 
             <div className="flex flex-col gap-3 py-4">
               {sortedRows.map((rowLabel) => (
                 <div key={rowLabel} className="flex gap-2.5 items-center">
-                  <div className="w-8 text-center text-sm font-extrabold text-indigo-400">
-                    {rowLabel}
-                  </div>
+                  <div className="w-8 text-center text-sm font-extrabold text-indigo-400">{rowLabel}</div>
                   {rows[rowLabel].map((seat) => {
-                    const isHeldByMe = (seat.status === 'HELD' && seat.heldByUserId === user?.id) || myHeldSeatIds.includes(seat.seatId);
+                    const isHeldByMe = seat.status === 'HELD' && seat.heldByUserId === user?.id;
                     const price = showPrices[seat.categoryId] || 0;
-
                     return (
-                      <button
-                        key={seat.id}
-                        type="button"
-                        onClick={() => handleSeatClick(seat)}
+                      <button key={seat.id} type="button" onClick={() => handleSeatClick(seat)}
                         disabled={seat.status === 'BOOKED' || (seat.status === 'HELD' && !isHeldByMe)}
-                        className={`w-10 h-10 rounded border font-semibold text-[10px] tracking-tighter flex flex-col items-center justify-center shadow-sm transition-all select-none active:scale-95 ${getSeatColor(
-                          seat,
-                        )}`}
-                        title={`${seat.categoryName} Seat ${rowLabel}${seat.number} - $${price.toFixed(2)} (${
-                          seat.status
-                        })`}
-                      >
-                        <span>
-                          {rowLabel}
-                          {seat.number}
-                        </span>
+                        className={`w-10 h-10 rounded border font-semibold text-[10px] tracking-tighter flex flex-col items-center justify-center shadow-sm transition-all select-none active:scale-95 ${getSeatColor(seat)}`}
+                        title={`${seat.categoryName} · ${rowLabel}${seat.number} · $${price.toFixed(2)} · ${seat.status}`}>
+                        <span>{rowLabel}{seat.number}</span>
                       </button>
                     );
                   })}
@@ -505,9 +531,9 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
             </div>
           </div>
 
+          {/* Legend */}
           <div className="p-4 bg-gray-50 border border-gray-150 rounded-xl flex flex-wrap gap-4 items-center justify-center text-xs">
             <span className="font-semibold text-gray-500 mr-2">Legend:</span>
-            {/* Dynamic per-category colour swatches */}
             {categoryOrder.map((catId) => (
               <div key={catId} className="flex items-center gap-1.5">
                 <span className={`w-3.5 h-3.5 rounded border ${getCategoryLegendColor(catId)}`}></span>
@@ -515,8 +541,8 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
               </div>
             ))}
             <div className="flex items-center gap-1.5">
-              <span className="w-3.5 h-3.5 bg-amber-500 border border-amber-600 rounded"></span>
-              <span>Held by Me</span>
+              <span className="w-3.5 h-3.5 bg-indigo-600 border border-indigo-700 rounded"></span>
+              <span>Selected</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-3.5 h-3.5 bg-gray-300 border border-gray-400 rounded"></span>
@@ -529,110 +555,68 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
           </div>
         </div>
 
+        {/* Sidebar */}
         <div className="space-y-6">
-          {/* Reservation Card */}
           <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 space-y-4">
-            <h4 className="font-bold text-gray-800 text-sm flex items-center justify-between">
-              <span className="flex items-center gap-1.5">
-                <ShoppingCart className="w-4.5 h-4.5 text-indigo-500" />
-                Reservation Summary
-              </span>
-              {myHeldSeatIds.length > 0 && (
-                <span className="flex items-center gap-1 text-xs text-amber-700 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded font-mono font-bold animate-pulse">
-                  <Clock className="w-3 h-3" />
-                  {formatTime(countdown)}
-                </span>
-              )}
+            <h4 className="font-bold text-gray-800 text-sm flex items-center gap-1.5">
+              <ShoppingCart className="w-4.5 h-4.5 text-indigo-500" /> Your Selection
             </h4>
 
-            {activeSeatIds.length === 0 ? (
+            {selectedSeatIds.length === 0 ? (
               <div className="py-6 text-center text-gray-400 text-xs">
-                No seats selected. Click available seats on the map to hold them.
+                Click available seats on the map to select them.<br />
+                <span className="text-indigo-400 font-semibold">No hold is created until you proceed.</span>
               </div>
             ) : (
               <div className="space-y-3">
                 <div className="max-h-48 overflow-y-auto space-y-2">
-                  {activeSeatIds.map((id) => {
+                  {selectedSeatIds.map((id) => {
                     const seat = seats.find((s) => s.seatId === id);
-                    const price = seat ? showPrices[seat.categoryId] || 0 : 0;
                     return (
-                      <div
-                        key={id}
-                        className="flex justify-between items-center p-2 bg-white border border-gray-200 rounded-lg text-xs"
-                      >
+                      <div key={id} className="flex justify-between items-center p-2 bg-white border border-gray-200 rounded-lg text-xs">
                         <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-gray-800">
-                            Seat {seat?.row}
-                            {seat?.number}
-                          </span>
-                          <span className="text-[9px] bg-gray-100 text-gray-600 border border-gray-250 px-1 py-0.5 rounded uppercase font-semibold">
-                            {seat?.categoryName}
-                          </span>
+                          <span className="font-bold text-gray-800">Seat {seat?.row}{seat?.number}</span>
+                          <span className="text-[9px] bg-gray-100 text-gray-600 border border-gray-200 px-1 py-0.5 rounded uppercase font-semibold">{seat?.categoryName}</span>
                         </div>
-                        <span className="font-bold text-indigo-600">${price.toFixed(2)}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-indigo-600">${getPrice(id).toFixed(2)}</span>
+                          <button onClick={() => setSelectedSeatIds((prev) => prev.filter((x) => x !== id))}
+                            className="text-gray-400 hover:text-red-500 transition-colors text-base leading-none">×</button>
+                        </div>
                       </div>
                     );
                   })}
                 </div>
 
                 <div className="pt-3 border-t border-gray-200 flex justify-between items-center font-bold text-sm text-gray-800">
-                  <span>Total Amount</span>
-                  <span className="text-indigo-600 text-lg">
-                    ${getSelectedSeatsPrice().toFixed(2)}
-                  </span>
+                  <span>Total</span>
+                  <span className="text-indigo-600 text-lg">${getTotalPrice(selectedSeatIds).toFixed(2)}</span>
                 </div>
 
-                {myHeldSeatIds.length === 0 ? (
-                  <button
-                    onClick={handleHoldSeats}
-                    disabled={loading}
-                    className="w-full mt-4 flex items-center justify-center gap-2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold text-sm shadow transition-colors disabled:opacity-50"
-                  >
-                    <UserCheck className="w-4 h-4" />
-                    Hold Seats (10 Min Lock)
-                  </button>
-                ) : (
-                  <div className="flex gap-2 mt-4">
-                    <button
-                      onClick={handleReleaseHolds}
-                      disabled={loading}
-                      className="w-1/2 flex items-center justify-center gap-1 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg font-semibold text-xs transition-colors"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      Release Holds
-                    </button>
-                    <button
-                      onClick={handleCheckout}
-                      disabled={loading}
-                      className="w-1/2 flex items-center justify-center gap-1.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold text-xs shadow transition-colors"
-                    >
-                      Proceed to Pay
-                    </button>
-                  </div>
-                )}
+                <button onClick={handleProceedToBooking} disabled={loading}
+                  className="w-full mt-2 flex items-center justify-center gap-2 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-sm shadow transition-colors disabled:opacity-50">
+                  {loading ? <Loader className="w-4 h-4 animate-spin" /> : <UserCheck className="w-4 h-4" />}
+                  Proceed to Booking
+                </button>
+                <p className="text-[10px] text-gray-400 text-center">
+                  All seats held atomically — if any conflict, none are held.
+                </p>
               </div>
             )}
           </div>
 
-          {/* Sold out / Waitlist Section */}
           {soldOutCategories.length > 0 && (
             <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-200 space-y-3">
               <h4 className="font-bold text-indigo-900 text-xs flex items-center gap-1.5">
-                <Users className="w-4.5 h-4.5 text-indigo-600" />
-                Queue Waitlist Active
+                <Users className="w-4.5 h-4.5 text-indigo-600" /> Queue Waitlist Active
               </h4>
-              <p className="text-[10px] text-indigo-700">
-                The seat categories below are fully booked. Join the waitlist to receive priority ticket offers if seats are released.
-              </p>
+              <p className="text-[10px] text-indigo-700">Join the waitlist for priority offers when seats free up.</p>
               <div className="space-y-2">
                 {soldOutCategories.map((catId) => (
                   <div key={catId} className="flex justify-between items-center p-2.5 bg-white border border-indigo-150 rounded-lg text-xs">
                     <span className="font-bold text-gray-700">{categoryStatus[catId].name}</span>
-                    <button
-                      onClick={() => handleJoinWaitlist(catId)}
-                      disabled={loading}
-                      className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-[10px] font-bold transition-colors focus:outline-none"
-                    >
+                    <button onClick={() => handleJoinWaitlist(catId)} disabled={loading}
+                      className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-[10px] font-bold transition-colors">
                       Join Queue
                     </button>
                   </div>
@@ -644,8 +628,8 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
           <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 text-xs text-amber-800 flex items-start gap-2">
             <ShieldAlert className="w-4.5 h-4.5 mt-0.5 flex-shrink-0 text-amber-500" />
             <div>
-              <span className="font-bold">Hold Policy:</span> Seats held are locked to your session for exactly 10 minutes. 
-              If payment or booking confirmation is not completed within that window, the hold is auto-released and offered to waitlist users.
+              <span className="font-bold">Hold Policy:</span> Proceeding atomically holds <em>all</em> selected seats or <em>none</em>.
+              If any seat was just taken, you'll see which ones to replace before any hold is created.
             </div>
           </div>
         </div>
@@ -653,3 +637,5 @@ export default function SeatMap({ showId, venueName, onBack }: SeatMapProps) {
     </div>
   );
 }
+
+

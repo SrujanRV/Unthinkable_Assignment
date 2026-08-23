@@ -163,36 +163,55 @@ export const holdSeats = async (req: AuthenticatedRequest, res: Response): Promi
       return;
     }
 
-    // Check if any seat is already booked or currently held in DB (where heldUntil is still active and not owned by current user)
+    // Check if any seat is already booked or held by someone else — collect ALL conflicts first
     const now = new Date();
+    const preflightConflicts: string[] = [];
     for (const ss of currentSeats) {
       if (ss.status === 'BOOKED') {
-        res.status(400).json({ error: { message: `Seat is already booked`, status: 400 } });
-        return;
-      }
-      if (ss.status === 'HELD' && ss.heldUntil && ss.heldUntil > now && ss.heldByUserId !== userId) {
-        res.status(400).json({ error: { message: `Seat is already held by another user`, status: 400 } });
-        return;
+        preflightConflicts.push(ss.seatId);
+      } else if (ss.status === 'HELD' && ss.heldUntil && ss.heldUntil > now && ss.heldByUserId !== userId) {
+        preflightConflicts.push(ss.seatId);
       }
     }
 
-    // 2. Acquire locks in Redis atomically
+    if (preflightConflicts.length > 0) {
+      res.status(409).json({
+        error: {
+          message: `${preflightConflicts.length} seat(s) in your selection are already taken. Please reselect.`,
+          conflictingSeatIds: preflightConflicts,
+          status: 409,
+        },
+      });
+      return;
+    }
+
+
+    // 2. Acquire locks in Redis atomically — all-or-nothing across the batch
+    const conflictingSeatIds: string[] = [];
     for (const seatId of seatIds) {
       const lockKey = `show:${showId}:seat:${seatId}:hold`;
       const acquired = await redis.set(lockKey, userId, 'EX', SEAT_HOLD_TTL_SECONDS, 'NX');
-      
+
       if (acquired === 'OK') {
         lockedKeys.push(lockKey);
       } else {
-        // Rollback already acquired locks to guarantee all-or-nothing atomicity for this batch!
-        if (lockedKeys.length > 0) {
-          await redis.del(...lockedKeys);
-        }
-        res.status(400).json({
-          error: { message: 'One or more seats are already held by another user. Please choose another seat.', status: 400 },
-        });
-        return;
+        conflictingSeatIds.push(seatId);
       }
+    }
+
+    if (conflictingSeatIds.length > 0) {
+      // Roll back every lock acquired so far — leave nothing held
+      if (lockedKeys.length > 0) {
+        await redis.del(...lockedKeys);
+      }
+      res.status(409).json({
+        error: {
+          message: `${conflictingSeatIds.length} seat(s) in your selection were just taken by another user. Please reselect.`,
+          conflictingSeatIds,
+          status: 409,
+        },
+      });
+      return;
     }
 
     // 3. Update PostgreSQL durable statuses

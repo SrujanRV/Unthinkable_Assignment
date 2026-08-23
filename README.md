@@ -108,15 +108,38 @@ For this application, we implemented a **stateless, access-token-only JWT authen
 
 ---
 
+## 🛡️ Role-Based Access Control (RBAC)
+
+To secure user actions and protect system resources, we enforce strict role-based access control (RBAC). The backend route guards serve as the single source of truth, while the frontend hides UI elements matching unauthorized views.
+
+### Permissions Matrix
+
+| Feature / Action | API Endpoint | CUSTOMER | ORGANISER | ADMIN |
+| :--- | :--- | :---: | :---: | :---: |
+| Browse events & shows | `GET /api/events`, `GET /api/shows/:id` | ✅ | ✅ | ✅ |
+| View seat maps & availability | `GET /api/shows/:id/seats` | ✅ | ✅ | ✅ |
+| Hold seats (10-min lock) | `POST /api/shows/:id/hold` | ✅ | ❌ (403) | ❌ (403) |
+| Release held seats | `POST /api/shows/:id/release` | ✅ | ❌ (403) | ❌ (403) |
+| Checkout & confirm booking | `POST /api/shows/:id/checkout` | ✅ | ❌ (403) | ❌ (403) |
+| Join waitlist for sold-out seats | `POST /api/shows/:id/waitlist` | ✅ | ❌ (403) | ❌ (403) |
+| View personal booking history | `GET /api/bookings` | ✅ | ❌ (403) | ❌ (403) |
+| Cancel booking & release seats | `POST /api/bookings/:id/cancel` | ✅ | ❌ (403) | ❌ (403) |
+| Access Organiser Dashboard & Sales Metrics | `GET /api/organiser/*` | ❌ (403) | ✅ | ❌ (403) |
+| Manage Venues & Seat Layouts | `POST /api/admin/*` | ❌ (403) | ❌ (403) | ✅ |
+| View System Health Metrics | `GET /api/health` | ❌ (403) | ❌ (403) | ✅ |
+
+---
+
+
 ## 🔒 Concurrency-Safe Seat Holds (System Design)
 
 To ensure that two simultaneous customers racing to select and reserve the exact same seat never both succeed, we chose **Redis-based Distributed Locking with TTL** using the atomic `SETNX` (Set if Not Exists) operation.
 
-### Why Redis SETNX?
+### Why Redis SETNX over Postgres SELECT ... FOR UPDATE?
 1. **Single-threaded Event Loop**: Redis executes incoming operations sequentially on a single thread. This ensures that even if two requests arrive at the exact same microsecond, Redis processes one first, guaranteeing order of execution.
 2. **Atomic Write-and-Check**: The command `SET show:{showId}:seat:{seatId}:hold {userId} EX {ttl} NX` combines validation and writing into a single CPU instruction at the cache layer. 
    - If the seat is free, it locks it for the user and returns `OK`.
    - If the seat is already held, the command immediately returns `null` (fails), refusing to modify the state.
-3. **High Throughput**: Under high concurrency (e.g., concert ticket drops), database lock operations like `SELECT ... FOR UPDATE` can degrade PostgreSQL performance and lead to deadlocks or thread pool exhaustion. Offloading the active lock contention to Redis keeps the database light and scales to thousands of concurrent requests per second.
-4. **All-or-Nothing Hold Atomicity**: When a user selects multiple seats (e.g., A1, A2, A3) and submits them in a single hold request, the backend attempts to lock each seat in Redis sequentially. If *any* of the seats fail to lock (because it's already held by another user), the backend rolls back all successfully acquired locks in that batch (by deleting the keys) and fails the request. This guarantees all-or-nothing atomicity.
+3. **High Throughput & Database Isolation**: Under high concurrency (e.g., concert ticket drops), database lock operations like `SELECT ... FOR UPDATE` on Postgres can degrade performance and lead to deadlocks or database connection pool exhaustion. Offloading active lock contention to Redis keeps the database light and scales to thousands of concurrent requests per second. While `SELECT ... FOR UPDATE` is a reliable choice for strictly SQL-only transactional safety, using Redis as the high-throughput lock engine ensures we do not block heavy transactional operations on Postgres.
+4. **All-or-Nothing Hold Atomicity**: When a user selects multiple seats (e.g., A1, A2, A3) and submits them in a single hold request, the backend attempts to lock each seat in Redis sequentially. If *any* of the seats fail to lock (because it's already held by another user), the backend rolls back all successfully acquired locks in that batch (by deleting the keys) and fails the request with a `409 Conflict` status containing the `conflictingSeatIds`. This guarantees all-or-nothing atomicity.
 5. **Background Expiry Sweeper**: Redis handles lock expiration natively using `EX` (TTL). To keep PostgreSQL durable states in sync, a background cron sweeps PostgreSQL `ShowSeat` records whose `heldUntil` timestamp has passed, double-checks if the lock has expired in Redis, releases the SQL record if so, and broadcasts a Socket.io `seatStatusUpdate` to notify all browsing clients of the seat release in real-time.
