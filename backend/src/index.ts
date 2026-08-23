@@ -6,6 +6,7 @@ import { Server } from 'socket.io';
 import app from './app';
 import { prisma } from './services/db.service';
 import { redis } from './services/redis.service';
+import { startHoldSweep } from './services/hold-sweep.service';
 
 const PORT = process.env.PORT || 5000;
 const server = http.createServer(app);
@@ -55,6 +56,9 @@ const startServer = async () => {
     server.listen(PORT, () => {
       console.log(`[Boot] Server is running on port ${PORT}`);
       console.log(`[Boot] Health check endpoint: http://localhost:${PORT}/api/health`);
+      
+      // Initialize the expired seat holds sweep cron worker
+      startHoldSweep(io);
     });
   } catch (error) {
     console.error('[Boot] Server failed to start:', error);

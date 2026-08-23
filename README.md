@@ -105,3 +105,18 @@ For this application, we implemented a **stateless, access-token-only JWT authen
 1. **Stateless Scalability**: The primary focus of a high-concurrency ticket platform is throughput and minimizing database overhead. Standard refresh token flows require token verification DB queries, tables, or blacklists. Keeping JWTs stateless allows our Express middleware to quickly authorize users by unpacking the cryptographic signature in memory without adding database read bottlenecks.
 2. **Simplified Test Harnesses**: In integration testing and concurrency stress tests, token expirations can complicate assertions. A 24-hour access token window keeps tokens stable for the lifecycle of our local developer sessions and test suites.
 3. **Roles in Claims**: The user's role (`CUSTOMER`, `ORGANISER`, or `ADMIN`) is embedded inside the JWT token claims. The backend can instantly restrict or grant route access using role-based claims in the request pipeline.
+
+---
+
+## 🔒 Concurrency-Safe Seat Holds (System Design)
+
+To ensure that two simultaneous customers racing to select and reserve the exact same seat never both succeed, we chose **Redis-based Distributed Locking with TTL** using the atomic `SETNX` (Set if Not Exists) operation.
+
+### Why Redis SETNX?
+1. **Single-threaded Event Loop**: Redis executes incoming operations sequentially on a single thread. This ensures that even if two requests arrive at the exact same microsecond, Redis processes one first, guaranteeing order of execution.
+2. **Atomic Write-and-Check**: The command `SET show:{showId}:seat:{seatId}:hold {userId} EX {ttl} NX` combines validation and writing into a single CPU instruction at the cache layer. 
+   - If the seat is free, it locks it for the user and returns `OK`.
+   - If the seat is already held, the command immediately returns `null` (fails), refusing to modify the state.
+3. **High Throughput**: Under high concurrency (e.g., concert ticket drops), database lock operations like `SELECT ... FOR UPDATE` can degrade PostgreSQL performance and lead to deadlocks or thread pool exhaustion. Offloading the active lock contention to Redis keeps the database light and scales to thousands of concurrent requests per second.
+4. **All-or-Nothing Hold Atomicity**: When a user selects multiple seats (e.g., A1, A2, A3) and submits them in a single hold request, the backend attempts to lock each seat in Redis sequentially. If *any* of the seats fail to lock (because it's already held by another user), the backend rolls back all successfully acquired locks in that batch (by deleting the keys) and fails the request. This guarantees all-or-nothing atomicity.
+5. **Background Expiry Sweeper**: Redis handles lock expiration natively using `EX` (TTL). To keep PostgreSQL durable states in sync, a background cron sweeps PostgreSQL `ShowSeat` records whose `heldUntil` timestamp has passed, double-checks if the lock has expired in Redis, releases the SQL record if so, and broadcasts a Socket.io `seatStatusUpdate` to notify all browsing clients of the seat release in real-time.
