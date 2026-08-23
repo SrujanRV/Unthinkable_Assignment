@@ -5,6 +5,7 @@ import RegisterPage from './components/RegisterPage';
 import HealthDashboard from './components/HealthDashboard';
 import AdminPanel from './components/AdminPanel';
 import OrganiserPanel from './components/OrganiserPanel';
+import BrowseEvents from './components/BrowseEvents';
 import { LogOut, User, Activity, Shield, LayoutGrid, Music } from 'lucide-react';
 
 function MainContent() {
@@ -186,10 +187,11 @@ function MainContent() {
                 ) : isOrganiser ? (
                   <span> Use the Organiser Panel to list new events and manage tickets pricing.</span>
                 ) : (
-                  <span> Welcome to the ticketing platform! The event listing and bookings will be available here.</span>
+                  <span> Welcome to the ticketing platform! Search and book your seats below.</span>
                 )}
               </p>
             </div>
+            <BrowseEvents />
           </div>
         )}
 

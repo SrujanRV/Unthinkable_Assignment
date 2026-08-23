@@ -22,6 +22,16 @@ const io = new Server(server, {
 io.on('connection', (socket) => {
   console.log(`[Socket.io] Client connected: ${socket.id}`);
 
+  socket.on('joinShow', (showId: string) => {
+    socket.join(`show:${showId}`);
+    console.log(`[Socket.io] Client ${socket.id} joined room: show:${showId}`);
+  });
+
+  socket.on('leaveShow', (showId: string) => {
+    socket.leave(`show:${showId}`);
+    console.log(`[Socket.io] Client ${socket.id} left room: show:${showId}`);
+  });
+
   socket.on('disconnect', () => {
     console.log(`[Socket.io] Client disconnected: ${socket.id}`);
   });
