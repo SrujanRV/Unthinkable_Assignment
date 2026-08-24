@@ -9,7 +9,7 @@ import { EventType } from '@prisma/client';
 // Zod validation schemas
 const CreateListingSchema = z.object({
   title: z.string().min(1, 'Title is required'),
-  description: z.string().min(1, 'Description is required'),
+  description: z.string().optional().or(z.literal('')).transform((val) => val && val.trim() ? val : 'No description provided.'),
   type: z.nativeEnum(EventType),
   posterUrl: z.string().nullable().optional().or(z.literal('')),
   venueId: z.string().uuid('Invalid venue ID'),

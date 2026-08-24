@@ -648,6 +648,18 @@ export default function OrganiserPanel() {
               </div>
 
               <div className="md:col-span-2">
+                <label className="block text-xs font-semibold text-gray-500 uppercase">Event Description</label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={3}
+                  className="mt-1 block w-full rounded border border-gray-300 px-3 py-2 text-sm"
+                  placeholder="Provide event overview, guidelines, etc."
+                  required
+                />
+              </div>
+
+              <div className="md:col-span-2">
                 <label className="block text-xs font-semibold text-gray-500 uppercase">Poster Image URL (Optional)</label>
                 <input
                   type="url"
