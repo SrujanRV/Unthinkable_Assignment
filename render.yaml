@@ -31,6 +31,6 @@ services:
 databases:
   - name: grabaseat-db
     databaseName: ticket_booking
-    user: postgres
+    user: grabaseat_user
     region: oregon
     plan: free
