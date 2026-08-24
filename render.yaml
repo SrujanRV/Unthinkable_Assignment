@@ -27,7 +27,7 @@ services:
       - key: OFFER_TTL_SECONDS
         value: 300
       - key: FRONTEND_URL
-        value: https://grabaseat.vercel.app
+        value: https://unthinkable-assignment-frontend.vercel.app
       - key: BACKEND_URL
         value: https://grabaseat-backend.onrender.com
 

@@ -1,6 +1,6 @@
 # 🎟️ Grabaseat — High-Concurrency Ticket Booking Platform
 
-> 🌐 **Live Application**: [https://grabaseat.vercel.app](https://grabaseat.vercel.app)  
+> 🌐 **Live Application**: [https://unthinkable-assignment-frontend.vercel.app](https://unthinkable-assignment-frontend.vercel.app)  
 > ⚡ **Backend API Server**: [https://grabaseat-backend.onrender.com](https://grabaseat-backend.onrender.com)  
 > 🏥 **Health & Status Ping**: [https://grabaseat-backend.onrender.com/api/health](https://grabaseat-backend.onrender.com/api/health)
 
@@ -417,8 +417,8 @@ For a detailed technical architectural write-up on race-safety, Redis atomic `SE
 
 | Service | Platform | Target URL / Configuration |
 | :--- | :--- | :--- |
-| **Frontend Web App** | Vercel | `https://grabaseat.vercel.app` *(Replace with your Vercel URL)* |
-| **Backend API Server** | Render (Web Service) | `https://grabaseat-backend.onrender.com` *(Replace with your Render URL)* |
+| **Frontend Web App** | Vercel | `https://unthinkable-assignment-frontend.vercel.app` |
+| **Backend API Server** | Render (Web Service) | `https://grabaseat-backend.onrender.com` |
 | **Database** | Render (PostgreSQL) | Managed PostgreSQL Database |
 | **Cache & Lock Store** | Render / Upstash | Managed Redis Instance |
 | **24/7 Keep-Alive Cron** | GitHub Actions / cron-job.org | `https://grabaseat-backend.onrender.com/api/health` (Pings every 10m) |
@@ -450,7 +450,7 @@ For a detailed technical architectural write-up on race-safety, Redis atomic `SE
    - `JWT_SECRET`: `<Secure-Random-Secret-Key>`
    - `SEAT_HOLD_TTL_SECONDS`: `600`
    - `OFFER_TTL_SECONDS`: `300`
-   - `FRONTEND_URL`: `https://grabaseat.vercel.app`
+   - `FRONTEND_URL`: `https://unthinkable-assignment-frontend.vercel.app`
    - `BACKEND_URL`: `https://grabaseat-backend.onrender.com`
 4. Click **Deploy Web Service**.
 
