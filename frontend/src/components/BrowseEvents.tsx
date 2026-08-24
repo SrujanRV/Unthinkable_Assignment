@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
-import { Search, Calendar, MapPin, ArrowRight, Loader, Film, Music2, Filter } from 'lucide-react';
+import { Search, Calendar, MapPin, ArrowRight, Loader, Film, Music2 } from 'lucide-react';
 import SeatMap from './SeatMap';
 
 interface Venue {
@@ -127,134 +127,149 @@ export default function BrowseEvents() {
     );
   }
 
-  const typeConfig = {
-    MOVIE: {
-      icon: Film,
-      gradient: 'from-slate-700 to-slate-900',
-      btn: 'bg-slate-700 hover:bg-slate-800',
-    },
-    CONCERT: {
-      icon: Music2,
-      gradient: 'from-indigo-700 to-violet-900',
-      btn: 'bg-indigo-600 hover:bg-indigo-700',
-    },
-  };
 
   const inputCls =
-    'block w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 placeholder-gray-400 ' +
-    'focus:border-indigo-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all ' +
-    'dark:border-slate-600 dark:bg-slate-700 dark:text-gray-100 dark:placeholder-slate-400 ' +
-    'dark:focus:border-indigo-500 dark:focus:bg-slate-600';
+    'block w-full rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 placeholder-slate-400 ' +
+    'focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/10 transition-all ' +
+    'dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder-slate-500 ' +
+    'dark:focus:border-indigo-500 dark:focus:bg-slate-800';
 
   return (
-    <div className="space-y-6">
-      {/* Filtering Header panel */}
-      <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-sm transition-colors">
-        <div className="flex items-center gap-2 mb-4">
-          <Filter className="w-4 h-4 text-gray-400 dark:text-slate-500" />
-          <h2 className="text-sm font-bold text-gray-600 dark:text-slate-400 uppercase tracking-wider">
-            Browse Movies &amp; Concerts
-          </h2>
+    <div className="space-y-8">
+      {/* Hero & Search Header */}
+      <div className="bg-gradient-to-b from-indigo-950/5 via-slate-50 to-slate-50 dark:from-indigo-950/20 dark:via-slate-950 dark:to-slate-950 p-8 rounded-2xl border border-slate-200/80 dark:border-slate-800 text-center space-y-6">
+        <div className="max-w-2xl mx-auto space-y-2">
+          <span className="inline-block text-xs font-semibold uppercase tracking-widest text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-3 py-1 rounded-full border border-indigo-200/50 dark:border-indigo-800/50">
+            High-Concurrency Ticket Booking
+          </span>
+          <h1 className="text-3xl font-extrabold text-slate-900 dark:text-slate-50 tracking-tight sm:text-4xl">
+            Discover &amp; Book Live Experiences
+          </h1>
+          <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+            Real-time seat holds with Redis distributed locks, automated waitlists, and instant QR passes.
+          </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-          {/* Keyword Search */}
-          <div className="relative">
-            <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400 dark:text-slate-500 pointer-events-none">
-              <Search className="w-4 h-4" />
-            </span>
+        {/* Integrated Filter Bar */}
+        <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm max-w-4xl mx-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
+            {/* Search */}
+            <div className="relative">
+              <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400 dark:text-slate-500 pointer-events-none">
+                <Search className="w-4 h-4" />
+              </span>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className={`pl-9.5 ${inputCls}`}
+                placeholder="Search events..."
+              />
+            </div>
+
+            {/* Type */}
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className={inputCls}
+            >
+              <option value="ALL">All Categories</option>
+              <option value="CONCERT">🎵 Concerts</option>
+              <option value="MOVIE">🎬 Movies</option>
+            </select>
+
+            {/* Venue */}
+            <select
+              value={venueFilter}
+              onChange={(e) => setVenueFilter(e.target.value)}
+              className={inputCls}
+            >
+              <option value="ALL">All Venues</option>
+              {venues.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}
+                </option>
+              ))}
+            </select>
+
+            {/* Date */}
             <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className={`pl-9 ${inputCls}`}
-              placeholder="Search events..."
+              type="date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className={inputCls}
             />
           </div>
-
-          {/* Type Filter */}
-          <select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
-            className={inputCls}
-          >
-            <option value="ALL">All Categories</option>
-            <option value="CONCERT">🎵 Concerts</option>
-            <option value="MOVIE">🎬 Movies</option>
-          </select>
-
-          {/* Venue Filter */}
-          <select
-            value={venueFilter}
-            onChange={(e) => setVenueFilter(e.target.value)}
-            className={inputCls}
-          >
-            <option value="ALL">All Venues</option>
-            {venues.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.name}
-              </option>
-            ))}
-          </select>
-
-          {/* Date Filter */}
-          <input
-            type="date"
-            value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
-            className={inputCls}
-          />
         </div>
       </div>
 
       {error && (
-        <div className="p-4 text-sm text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-200 dark:border-red-800">
+        <div className="p-4 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 rounded-xl border border-red-200 dark:border-red-900/50">
           {error}
         </div>
       )}
 
       {/* Events Grid */}
       {loading ? (
-        <div className="py-16 text-center">
-          <Loader className="w-10 h-10 animate-spin text-indigo-500 mx-auto" />
-          <p className="mt-3 text-sm text-gray-500 dark:text-slate-400">Finding events for you...</p>
+        <div className="py-20 text-center space-y-3">
+          <Loader className="w-8 h-8 animate-spin text-indigo-600 mx-auto" />
+          <p className="text-xs text-slate-500 dark:text-slate-400">Loading events and venues...</p>
         </div>
       ) : filteredEvents.length === 0 ? (
-        <div className="py-16 text-center text-gray-400 dark:text-slate-500 border-2 border-dashed border-gray-200 dark:border-slate-700 rounded-2xl">
-          <p className="text-base font-semibold">No events match your search</p>
-          <p className="text-sm mt-1">Try adjusting your filters or search term</p>
+        <div className="py-20 text-center text-slate-400 dark:text-slate-500 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl space-y-2">
+          <p className="text-sm font-medium text-slate-700 dark:text-slate-300">No matching events found</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Try clearing or adjusting your search filters</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {filteredEvents.map((event) => {
-            const cfg = typeConfig[event.type];
-            const TypeIcon = cfg.icon;
+            const isConcert = event.type === 'CONCERT';
+            const EventIcon = isConcert ? Music2 : Film;
+
+            // Calculate starting price
+            let minPrice = Infinity;
+            event.shows.forEach((s) => {
+              s.showPrices.forEach((sp) => {
+                const p = Number(sp.price);
+                if (p < minPrice) minPrice = p;
+              });
+            });
 
             return (
               <div
                 key={event.id}
-                className="bg-white dark:bg-slate-800 rounded-2xl border border-gray-200 dark:border-slate-700 overflow-hidden flex flex-col shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
+                className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/90 dark:border-slate-800 overflow-hidden flex flex-col hover:border-indigo-500/50 hover:shadow-md transition-all duration-200 group"
               >
-                {/* Card header stripe — gradients are already dark, look great in both modes */}
-                <div className={`bg-gradient-to-r ${cfg.gradient} px-5 py-4 flex items-start gap-3`}>
-                  <div className="w-10 h-10 bg-white/15 rounded-xl flex items-center justify-center flex-shrink-0">
-                    <TypeIcon className="w-5 h-5 text-white" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-base font-bold text-white leading-tight">{event.title}</h3>
-                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-white/20 text-white uppercase tracking-wide">
-                        {event.type}
+                {/* Widescreen Banner */}
+                <div className={`aspect-video w-full p-6 flex flex-col justify-between relative bg-gradient-to-br ${
+                  isConcert ? 'from-indigo-900 via-indigo-950 to-slate-950' : 'from-slate-800 via-slate-900 to-slate-950'
+                } text-white`}>
+                  <div className="flex items-center justify-between z-10">
+                    <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-md bg-white/10 backdrop-blur-xs border border-white/15 uppercase tracking-wider">
+                      <EventIcon className="w-3 h-3 text-indigo-300" />
+                      {event.type}
+                    </span>
+                    {minPrice !== Infinity && (
+                      <span className="text-xs font-semibold bg-indigo-600 text-white px-2.5 py-1 rounded-md shadow-xs">
+                        From ${minPrice.toFixed(2)}
                       </span>
-                    </div>
-                    <p className="text-sm text-white/75 mt-0.5 line-clamp-2">{event.description}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-1.5 z-10">
+                    <h3 className="text-xl font-bold text-white tracking-tight leading-snug group-hover:text-indigo-200 transition-colors">
+                      {event.title}
+                    </h3>
+                    <p className="text-xs text-slate-300 line-clamp-2 leading-relaxed">
+                      {event.description}
+                    </p>
                   </div>
                 </div>
 
-                {/* Showtimes */}
-                <div className="px-5 py-4 flex-1 space-y-3 bg-gray-50/40 dark:bg-slate-800/60">
-                  <span className="block text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest">
-                    Available Showtimes
+                {/* Showtimes List */}
+                <div className="p-5 flex-1 space-y-3 bg-slate-50/50 dark:bg-slate-900/60">
+                  <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+                    Available Showtimes ({event.shows.length})
                   </span>
                   <div className="space-y-2.5">
                     {event.shows
@@ -270,29 +285,17 @@ export default function BrowseEvents() {
                       .map((show) => (
                         <div
                           key={show.id}
-                          className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 bg-white dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-xl text-sm gap-3 hover:border-indigo-300 dark:hover:border-indigo-500 hover:shadow-sm transition-all duration-150 group"
+                          className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 rounded-lg text-sm gap-3 hover:border-indigo-300 dark:hover:border-indigo-600 transition-all duration-150"
                         >
-                          <div className="space-y-1.5 flex-1 min-w-0">
-                            <div className="flex items-center gap-2 text-gray-800 dark:text-gray-100 font-semibold">
-                              <Calendar className="w-4 h-4 text-indigo-400 flex-shrink-0" />
-                              <span className="text-sm">{new Date(show.startTime).toLocaleString()}</span>
+                          <div className="space-y-1 flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 text-slate-900 dark:text-slate-100 font-semibold text-xs sm:text-sm">
+                              <Calendar className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" />
+                              <span>{new Date(show.startTime).toLocaleString()}</span>
                             </div>
-                            <div className="flex items-center gap-2 text-gray-500 dark:text-slate-400 text-xs">
-                              <MapPin className="w-3.5 h-3.5 text-indigo-300 flex-shrink-0" />
-                              <span>{show.venue.name} &middot; {show.venue.location}</span>
+                            <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 text-xs">
+                              <MapPin className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                              <span className="truncate">{show.venue.name} &middot; {show.venue.location}</span>
                             </div>
-                            {show.showPrices.length > 0 && (
-                              <div className="flex flex-wrap gap-1.5 pt-0.5">
-                                {show.showPrices.map((sp) => (
-                                  <span
-                                    key={sp.id}
-                                    className="text-[10px] font-bold bg-gray-100 dark:bg-slate-600 text-gray-600 dark:text-slate-300 px-2 py-0.5 rounded-full"
-                                  >
-                                    {sp.category.name} · ${Number(sp.price).toFixed(2)}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
                           </div>
 
                           <button
@@ -303,10 +306,10 @@ export default function BrowseEvents() {
                                 venueName: show.venue.name,
                               })
                             }
-                            className={`flex items-center justify-center gap-1.5 px-4 py-2 ${cfg.btn} text-white rounded-lg text-xs font-bold transition-all duration-150 shadow-sm group-hover:shadow-md whitespace-nowrap`}
+                            className="flex items-center justify-center gap-1 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold transition-colors shadow-xs whitespace-nowrap self-end sm:self-center"
                           >
                             Select Seats
-                            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                            <ArrowRight className="w-3.5 h-3.5 ml-0.5" />
                           </button>
                         </div>
                       ))}
