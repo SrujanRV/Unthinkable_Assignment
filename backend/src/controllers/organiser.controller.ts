@@ -11,9 +11,9 @@ const CreateListingSchema = z.object({
   title: z.string().min(1, 'Title is required'),
   description: z.string().min(1, 'Description is required'),
   type: z.nativeEnum(EventType),
-  posterUrl: z.string().optional(),
+  posterUrl: z.string().nullable().optional().or(z.literal('')),
   venueId: z.string().uuid('Invalid venue ID'),
-  startTime: z.string().datetime('Invalid start time format'),
+  startTime: z.string().min(1, 'Start time is required'),
   prices: z.array(
     z.object({
       seatCategoryId: z.string().uuid('Invalid seat category ID'),
@@ -26,10 +26,10 @@ const UpdateListingSchema = z.object({
   title: z.string().min(1, 'Title is required').optional(),
   description: z.string().min(1, 'Description is required').optional(),
   type: z.nativeEnum(EventType).optional(),
-  posterUrl: z.string().optional(),
+  posterUrl: z.string().nullable().optional().or(z.literal('')),
   // Optional show updates
   showId: z.string().uuid('Invalid show ID').optional(),
-  startTime: z.string().datetime('Invalid start time format').optional(),
+  startTime: z.string().optional(),
   prices: z.array(
     z.object({
       seatCategoryId: z.string().uuid('Invalid seat category ID'),
@@ -47,7 +47,11 @@ export const createListing = async (req: AuthenticatedRequest, res: Response): P
 
     const validation = CreateListingSchema.safeParse(req.body);
     if (!validation.success) {
-      res.status(400).json({ error: { message: 'Validation failed', details: validation.error.flatten().fieldErrors, status: 400 } });
+      const fieldErrors = validation.error.flatten().fieldErrors;
+      const errorMsg = Object.entries(fieldErrors)
+        .map(([field, errs]) => `${field}: ${(errs || []).join(', ')}`)
+        .join('; ');
+      res.status(400).json({ error: { message: `Validation failed: ${errorMsg}`, details: fieldErrors, status: 400 } });
       return;
     }
 
@@ -180,7 +184,11 @@ export const updateListing = async (req: AuthenticatedRequest, res: Response): P
 
     const validation = UpdateListingSchema.safeParse(req.body);
     if (!validation.success) {
-      res.status(400).json({ error: { message: 'Validation failed', details: validation.error.flatten().fieldErrors, status: 400 } });
+      const fieldErrors = validation.error.flatten().fieldErrors;
+      const errorMsg = Object.entries(fieldErrors)
+        .map(([field, errs]) => `${field}: ${(errs || []).join(', ')}`)
+        .join('; ');
+      res.status(400).json({ error: { message: `Validation failed: ${errorMsg}`, details: fieldErrors, status: 400 } });
       return;
     }
 
