@@ -60,6 +60,7 @@ export default function BrowseEvents() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [failedPosters, setFailedPosters] = useState<{ [eventId: string]: boolean }>({});
+  const [imgSrcMap, setImgSrcMap] = useState<{ [eventId: string]: string }>({});
 
   // Filters State
   const [search, setSearch] = useState('');
@@ -256,11 +257,21 @@ export default function BrowseEvents() {
             });
 
             const defaultPoster = isConcert
-              ? 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=1200&q=80'
-              : 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=1200&q=80';
-            const posterSrc = (event.posterUrl && event.posterUrl.trim()) ? event.posterUrl : defaultPoster;
+              ? 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1200&q=80'
+              : 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=1200&q=80';
+
+            const activeSrc = imgSrcMap[event.id] ?? ((event.posterUrl && event.posterUrl.trim()) ? event.posterUrl : defaultPoster);
             const hasPoster = !failedPosters[event.id];
             const fallbackGradient = getFallbackGradient(event.title);
+
+            const handleImageError = () => {
+              if (activeSrc !== defaultPoster) {
+                // If custom URL failed (e.g. webpage link), fall back to high-res default poster!
+                setImgSrcMap((prev) => ({ ...prev, [event.id]: defaultPoster }));
+              } else {
+                setFailedPosters((prev) => ({ ...prev, [event.id]: true }));
+              }
+            };
 
             return (
               <div
@@ -272,9 +283,9 @@ export default function BrowseEvents() {
                   {hasPoster ? (
                     <>
                       <img
-                        src={posterSrc}
+                        src={activeSrc}
                         alt={event.title}
-                        onError={() => setFailedPosters((prev) => ({ ...prev, [event.id]: true }))}
+                        onError={handleImageError}
                         className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/50 to-slate-950/20" />
