@@ -25,6 +25,23 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Root landing endpoint
+app.get('/', (req, res) => {
+  res.status(200).json({
+    name: 'Grabaseat Backend API Server',
+    status: 'online',
+    version: '1.0.0',
+    documentation: 'https://github.com/SrujanRV/Unthinkable_Assignment',
+    healthCheck: '/api/health',
+    endpoints: {
+      health: 'GET /api/health',
+      events: 'GET /api/events',
+      venues: 'GET /api/venues',
+      auth: 'POST /api/auth/login, POST /api/auth/register',
+    },
+  });
+});
+
 // Register routes
 app.use('/api/health', healthRoutes);
 app.use('/api/auth', authRoutes);
