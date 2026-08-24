@@ -11,6 +11,7 @@ const CreateListingSchema = z.object({
   title: z.string().min(1, 'Title is required'),
   description: z.string().min(1, 'Description is required'),
   type: z.nativeEnum(EventType),
+  posterUrl: z.string().optional(),
   venueId: z.string().uuid('Invalid venue ID'),
   startTime: z.string().datetime('Invalid start time format'),
   prices: z.array(
@@ -25,6 +26,7 @@ const UpdateListingSchema = z.object({
   title: z.string().min(1, 'Title is required').optional(),
   description: z.string().min(1, 'Description is required').optional(),
   type: z.nativeEnum(EventType).optional(),
+  posterUrl: z.string().optional(),
   // Optional show updates
   showId: z.string().uuid('Invalid show ID').optional(),
   startTime: z.string().datetime('Invalid start time format').optional(),
@@ -49,7 +51,7 @@ export const createListing = async (req: AuthenticatedRequest, res: Response): P
       return;
     }
 
-    const { title, description, type, venueId, startTime, prices } = validation.data;
+    const { title, description, type, posterUrl, venueId, startTime, prices } = validation.data;
 
     // Verify venue exists
     const venue = await prisma.venue.findUnique({
@@ -82,6 +84,7 @@ export const createListing = async (req: AuthenticatedRequest, res: Response): P
           title,
           description,
           type,
+          posterUrl,
           organiserId: req.user!.id,
         },
       });
@@ -191,14 +194,14 @@ export const updateListing = async (req: AuthenticatedRequest, res: Response): P
       return;
     }
 
-    const { title, description, type, showId, startTime, prices } = validation.data;
+    const { title, description, type, posterUrl, showId, startTime, prices } = validation.data;
 
     await prisma.$transaction(async (tx) => {
       // 1. Update event metadata if provided
-      if (title || description || type) {
+      if (title || description || type || posterUrl !== undefined) {
         await tx.event.update({
           where: { id: eventId },
-          data: { title, description, type },
+          data: { title, description, type, posterUrl },
         });
       }
 

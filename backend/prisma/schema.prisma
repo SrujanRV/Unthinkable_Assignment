@@ -92,6 +92,7 @@ model Event {
   title       String
   description String
   type        EventType
+  posterUrl   String?
   organiserId String
   organiser   User      @relation("OrganiserEvents", fields: [organiserId], references: [id], onDelete: Cascade)
   isCancelled Boolean   @default(false)

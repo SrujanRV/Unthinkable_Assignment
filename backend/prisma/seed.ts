@@ -8,7 +8,24 @@ async function main() {
 
   const eventCount = await prisma.event.count();
   if (eventCount > 0) {
-    console.log('[Seed] Database already contains events. Skipping seed execution.');
+    console.log('[Seed] Updating existing events with poster URLs...');
+    await prisma.event.updateMany({
+      where: { title: { contains: 'Rock Legends' } },
+      data: { posterUrl: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=1200&q=80' },
+    });
+    await prisma.event.updateMany({
+      where: { title: { contains: 'Symphonic' } },
+      data: { posterUrl: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=1200&q=80' },
+    });
+    await prisma.event.updateMany({
+      where: { title: { contains: 'Inception' } },
+      data: { posterUrl: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=1200&q=80' },
+    });
+    await prisma.event.updateMany({
+      where: { title: { contains: 'Interstellar' } },
+      data: { posterUrl: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=1200&q=80' },
+    });
+    console.log('[Seed] Poster URLs backfilled successfully.');
     return;
   }
 
@@ -129,6 +146,7 @@ async function main() {
       title: 'Rock Legends Live Tour',
       description: 'An evening of classic rock featuring legendary bands performing their greatest hits live.',
       type: 'CONCERT',
+      posterUrl: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=1200&q=80',
       organiserId: organiser.id,
     },
   });
@@ -138,6 +156,7 @@ async function main() {
       title: 'Symphonic Movie Soundtracks',
       description: 'Experience your favorite movie scores performed by a full live symphony orchestra under the stars.',
       type: 'CONCERT',
+      posterUrl: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=1200&q=80',
       organiserId: organiser.id,
     },
   });
@@ -148,6 +167,7 @@ async function main() {
       title: 'Inception: 15th Anniversary Re-Release',
       description: 'Christopher Nolan\'s mind-bending masterpiece returns to the big screen for its 15th anniversary.',
       type: 'MOVIE',
+      posterUrl: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=1200&q=80',
       organiserId: organiser.id,
     },
   });
@@ -157,6 +177,7 @@ async function main() {
       title: 'Interstellar: IMAX Experience',
       description: 'Journey beyond the stars in this epic cinematic experience, remastered for high-fidelity theater systems.',
       type: 'MOVIE',
+      posterUrl: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=1200&q=80',
       organiserId: organiser.id,
     },
   });

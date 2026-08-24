@@ -43,6 +43,7 @@ interface OrganiserEvent {
   title: string;
   description: string;
   type: 'MOVIE' | 'CONCERT';
+  posterUrl?: string;
   isCancelled: boolean;
   shows: Show[];
 }
@@ -63,6 +64,7 @@ export default function OrganiserPanel() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [type, setType] = useState<'MOVIE' | 'CONCERT'>('CONCERT');
+  const [posterUrl, setPosterUrl] = useState('');
   const [selectedVenueId, setSelectedVenueId] = useState('');
   const [startTime, setStartTime] = useState('');
   const [categoryPrices, setCategoryPrices] = useState<{ [catId: string]: string }>({});
@@ -146,6 +148,7 @@ export default function OrganiserPanel() {
     setTitle('');
     setDescription('');
     setType('CONCERT');
+    setPosterUrl('');
     setSelectedVenueId('');
     setStartTime('');
     setCategoryPrices({});
@@ -168,6 +171,7 @@ export default function OrganiserPanel() {
         title,
         description,
         type,
+        posterUrl: posterUrl.trim() || undefined,
         venueId: selectedVenueId,
         startTime: new Date(startTime).toISOString(),
         prices: pricesPayload,
@@ -189,6 +193,7 @@ export default function OrganiserPanel() {
     setTitle(event.title);
     setDescription(event.description);
     setType(event.type);
+    setPosterUrl(event.posterUrl || '');
 
     const show = event.shows[0];
     if (show) {
@@ -223,6 +228,7 @@ export default function OrganiserPanel() {
         title,
         description,
         type,
+        posterUrl: posterUrl.trim() || undefined,
         showId: show?.id,
         startTime: new Date(startTime).toISOString(),
         prices: pricesPayload,
@@ -642,15 +648,25 @@ export default function OrganiserPanel() {
               </div>
 
               <div className="md:col-span-2">
-                <label className="block text-xs font-semibold text-gray-500 uppercase">Description</label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  rows={3}
+                <label className="block text-xs font-semibold text-gray-500 uppercase">Poster Image URL (Optional)</label>
+                <input
+                  type="url"
+                  value={posterUrl}
+                  onChange={(e) => setPosterUrl(e.target.value)}
                   className="mt-1 block w-full rounded border border-gray-300 px-3 py-2 text-sm"
-                  placeholder="Provide event overview, guidelines, etc."
-                  required
+                  placeholder="https://images.unsplash.com/photo-..."
                 />
+                {posterUrl && (
+                  <div className="mt-2.5 p-2 border border-gray-200 rounded-lg bg-gray-50 flex items-center gap-3">
+                    <img
+                      src={posterUrl}
+                      alt="Poster Preview"
+                      onError={(e) => (e.currentTarget.style.display = 'none')}
+                      className="w-24 aspect-video object-cover rounded border border-gray-300 shadow-xs"
+                    />
+                    <span className="text-xs text-gray-500 font-medium">Live Poster Preview</span>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -795,6 +811,28 @@ export default function OrganiserPanel() {
                   className="mt-1 block w-full rounded border border-gray-300 px-3 py-2 text-sm"
                   required
                 />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-xs font-semibold text-gray-500 uppercase">Poster Image URL (Optional)</label>
+                <input
+                  type="url"
+                  value={posterUrl}
+                  onChange={(e) => setPosterUrl(e.target.value)}
+                  className="mt-1 block w-full rounded border border-gray-300 px-3 py-2 text-sm"
+                  placeholder="https://images.unsplash.com/photo-..."
+                />
+                {posterUrl && (
+                  <div className="mt-2.5 p-2 border border-gray-200 rounded-lg bg-gray-50 flex items-center gap-3">
+                    <img
+                      src={posterUrl}
+                      alt="Poster Preview"
+                      onError={(e) => (e.currentTarget.style.display = 'none')}
+                      className="w-24 aspect-video object-cover rounded border border-gray-300 shadow-xs"
+                    />
+                    <span className="text-xs text-gray-500 font-medium">Live Poster Preview</span>
+                  </div>
+                )}
               </div>
 
               <div>

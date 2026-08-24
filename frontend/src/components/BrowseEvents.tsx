@@ -32,14 +32,34 @@ interface Event {
   title: string;
   description: string;
   type: 'MOVIE' | 'CONCERT';
+  posterUrl?: string;
   shows: Show[];
 }
+
+const GRADIENT_PALETTES = [
+  'from-indigo-900 via-purple-950 to-slate-950',
+  'from-slate-800 via-slate-900 to-slate-950',
+  'from-violet-900 via-indigo-950 to-slate-950',
+  'from-blue-900 via-slate-900 to-slate-950',
+  'from-emerald-900 via-teal-950 to-slate-950',
+  'from-rose-900 via-slate-900 to-slate-950',
+];
+
+const getFallbackGradient = (title: string) => {
+  let hash = 0;
+  for (let i = 0; i < title.length; i++) {
+    hash = title.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const index = Math.abs(hash) % GRADIENT_PALETTES.length;
+  return GRADIENT_PALETTES[index];
+};
 
 export default function BrowseEvents() {
   const [events, setEvents] = useState<Event[]>([]);
   const [venues, setVenues] = useState<Venue[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [failedPosters, setFailedPosters] = useState<{ [eventId: string]: boolean }>({});
 
   // Filters State
   const [search, setSearch] = useState('');
@@ -235,17 +255,32 @@ export default function BrowseEvents() {
               });
             });
 
+            const hasPoster = Boolean(event.posterUrl) && !failedPosters[event.id];
+            const fallbackGradient = getFallbackGradient(event.title);
+
             return (
               <div
                 key={event.id}
                 className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/90 dark:border-slate-800 overflow-hidden flex flex-col hover:border-indigo-500/50 hover:shadow-md transition-all duration-200 group"
               >
-                {/* Widescreen Banner */}
-                <div className={`aspect-video w-full p-6 flex flex-col justify-between relative bg-gradient-to-br ${
-                  isConcert ? 'from-indigo-900 via-indigo-950 to-slate-950' : 'from-slate-800 via-slate-900 to-slate-950'
-                } text-white`}>
-                  <div className="flex items-center justify-between z-10">
-                    <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-md bg-white/10 backdrop-blur-xs border border-white/15 uppercase tracking-wider">
+                {/* Widescreen Poster / Banner */}
+                <div className="aspect-video w-full p-6 flex flex-col justify-between relative overflow-hidden bg-slate-950 text-white">
+                  {hasPoster ? (
+                    <>
+                      <img
+                        src={event.posterUrl}
+                        alt={event.title}
+                        onError={() => setFailedPosters((prev) => ({ ...prev, [event.id]: true }))}
+                        className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/50 to-slate-950/20" />
+                    </>
+                  ) : (
+                    <div className={`absolute inset-0 bg-gradient-to-br ${fallbackGradient}`} />
+                  )}
+
+                  <div className="flex items-center justify-between z-10 relative">
+                    <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-md bg-white/10 backdrop-blur-md border border-white/15 uppercase tracking-wider">
                       <EventIcon className="w-3 h-3 text-indigo-300" />
                       {event.type}
                     </span>
@@ -256,7 +291,7 @@ export default function BrowseEvents() {
                     )}
                   </div>
 
-                  <div className="space-y-1.5 z-10">
+                  <div className="space-y-1.5 z-10 relative">
                     <h3 className="text-xl font-bold text-white tracking-tight leading-snug group-hover:text-indigo-200 transition-colors">
                       {event.title}
                     </h3>
