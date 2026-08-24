@@ -1,0 +1,16 @@
+name: Keep-Alive Health Ping (Render 24/7)
+
+on:
+  schedule:
+    # Triggers every 10 minutes to prevent Render free instance from spinning down
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Health Endpoint
+        run: |
+          echo "Pinging Grabaseat backend health endpoint..."
+          curl -s -o /dev/null -w "%{http_code}" https://grabaseat-backend.onrender.com/api/health

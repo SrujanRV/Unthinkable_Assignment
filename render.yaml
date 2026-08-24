@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: grabaseat-backend
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: cd backend && npm install && npm run build
+    startCommand: cd backend && npx prisma migrate deploy && npm start
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: NODE_ENV
+        value: production
+      - key: DB_URL
+        fromDatabase:
+          name: grabaseat-db
+          property: connectionString
+      - key: REDIS_URL
+        value: redis://localhost:6379
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SEAT_HOLD_TTL_SECONDS
+        value: 600
+      - key: OFFER_TTL_SECONDS
+        value: 300
+      - key: FRONTEND_URL
+        value: https://grabaseat.vercel.app
+      - key: BACKEND_URL
+        value: https://grabaseat-backend.onrender.com
+
+databases:
+  - name: grabaseat-db
+    databaseName: ticket_booking
+    user: postgres
+    region: oregon
+    plan: free

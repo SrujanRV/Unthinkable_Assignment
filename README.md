@@ -393,3 +393,75 @@ All endpoints requiring authentication expect a standard `Authorization: Bearer 
 ## 🔒 Deep Dive: Seat Hold TTL & Waitlist Logic
 
 For a detailed technical architectural write-up on race-safety, Redis atomic `SETNX` locking, batch atomicity, and waitlist offer cascading, see **[SYSTEM_DESIGN.md](file:///c:/Users/sruja/Desktop/Unthinkable_Assignment/SYSTEM_DESIGN.md)**.
+
+---
+
+## 🌐 Production Deployment Guide (Render + Vercel)
+
+### Live Deployment URLs & Checkpoints
+
+| Service | Platform | Target URL / Configuration |
+| :--- | :--- | :--- |
+| **Frontend Web App** | Vercel | `https://grabaseat.vercel.app` *(Replace with your Vercel URL)* |
+| **Backend API Server** | Render (Web Service) | `https://grabaseat-backend.onrender.com` *(Replace with your Render URL)* |
+| **Database** | Render (PostgreSQL) | Managed PostgreSQL Database |
+| **Cache & Lock Store** | Render / Upstash | Managed Redis Instance |
+| **24/7 Keep-Alive Cron** | GitHub Actions / cron-job.org | `https://grabaseat-backend.onrender.com/api/health` (Pings every 10m) |
+
+---
+
+### Step-by-Step Deployment Instructions
+
+#### Step 1: Deploy Database & Redis on Render
+1. Log in to [Render Dashboard](https://dashboard.render.com/).
+2. Create a **PostgreSQL Database**:
+   - **Name**: `grabaseat-db`
+   - **Database Name**: `ticket_booking`
+   - Copy the **Internal Database URL** (`postgresql://...`).
+3. Create a **Redis Instance** (Render Key-Value or Upstash Redis):
+   - Copy the `redis://...` Connection String.
+
+#### Step 2: Deploy Backend Web Service on Render
+1. Click **New +** -> **Web Service** on Render and select your GitHub repository.
+2. Configure settings:
+   - **Name**: `grabaseat-backend`
+   - **Root Directory**: `backend`
+   - **Environment**: `Node`
+   - **Build Command**: `npm install && npm run build`
+   - **Start Command**: `npx prisma migrate deploy && npm start`
+3. Add **Environment Variables** in Render Dashboard:
+   - `DB_URL`: `<Your-Render-PostgreSQL-Internal-URL>`
+   - `REDIS_URL`: `<Your-Redis-Connection-String>`
+   - `JWT_SECRET`: `<Secure-Random-Secret-Key>`
+   - `SEAT_HOLD_TTL_SECONDS`: `600`
+   - `OFFER_TTL_SECONDS`: `300`
+   - `FRONTEND_URL`: `https://grabaseat.vercel.app`
+   - `BACKEND_URL`: `https://grabaseat-backend.onrender.com`
+4. Click **Deploy Web Service**.
+
+#### Step 3: Seed Production Database
+Once the backend service is live on Render:
+```bash
+# Seed initial sample events, venues, showtimes, and seat layouts
+npx prisma db seed --schema=backend/prisma/schema.prisma
+```
+*(Alternatively, run `npx prisma db seed` directly inside Render Web Shell)*
+
+#### Step 4: Deploy Frontend Client on Vercel
+1. Log in to [Vercel Dashboard](https://vercel.com/) and click **Add New** -> **Project**.
+2. Import your GitHub repository `Unthinkable_Assignment`.
+3. Configure Project Settings:
+   - **Framework Preset**: `Vite`
+   - **Root Directory**: `frontend`
+4. Environment Variables:
+   - `VITE_API_URL`: `https://grabaseat-backend.onrender.com`
+5. Click **Deploy**. Vercel will build and serve your SPA at `https://<your-project>.vercel.app`.
+
+#### Step 5: Prevent Render Free Tier Sleep (10-Minute Health Ping)
+Render free tier web services automatically spin down after 15 minutes of inactivity. To keep Grabaseat awake and instantly responsive 24/7:
+1. **GitHub Actions Workflow (Pre-Configured)**:
+   - A ready-to-use workflow is included at `.github/workflows/keep-alive.yml` which automatically pings `https://grabaseat-backend.onrender.com/api/health` every 10 minutes (`*/10 * * * *`).
+2. **Alternative: External Cron Service**:
+   - Register a free account on [cron-job.org](https://cron-job.org).
+   - Create a cron job pointing to `https://grabaseat-backend.onrender.com/api/health`.
+   - Set Schedule: **Every 10 minutes**.
