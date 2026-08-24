@@ -6,49 +6,42 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('Checking database seed status...');
 
-  const userCount = await prisma.user.count();
-  if (userCount > 0) {
-    console.log('[Seed] Database already contains users. Skipping seed execution.');
+  const eventCount = await prisma.event.count();
+  if (eventCount > 0) {
+    console.log('[Seed] Database already contains events. Skipping seed execution.');
     return;
   }
 
-  console.log('Starting database seeding...');
-
-  // Clean existing database
-  console.log('Purging existing data...');
-  await prisma.showSeat.deleteMany({});
-  await prisma.showPrice.deleteMany({});
-  await prisma.booking.deleteMany({});
-  await prisma.waitlistEntry.deleteMany({});
-  await prisma.show.deleteMany({});
-  await prisma.event.deleteMany({});
-  await prisma.seat.deleteMany({});
-  await prisma.seatCategory.deleteMany({});
-  await prisma.venue.deleteMany({});
-  await prisma.user.deleteMany({});
+  console.log('Seeding initial events, venues, showtimes, seats, and test accounts...');
 
   // Hash password
   const passwordHash = bcrypt.hashSync('password123', 10);
 
-  // 1. Create Users
-  const organiser = await prisma.user.create({
-    data: {
+  // 1. Create/Upsert Users
+  const organiser = await prisma.user.upsert({
+    where: { email: 'organiser@test.com' },
+    update: {},
+    create: {
       email: 'organiser@test.com',
       passwordHash,
       role: 'ORGANISER',
     },
   });
 
-  const customer = await prisma.user.create({
-    data: {
+  const customer = await prisma.user.upsert({
+    where: { email: 'customer@test.com' },
+    update: {},
+    create: {
       email: 'customer@test.com',
       passwordHash,
       role: 'CUSTOMER',
     },
   });
 
-  const admin = await prisma.user.create({
-    data: {
+  const admin = await prisma.user.upsert({
+    where: { email: 'admin@test.com' },
+    update: {},
+    create: {
       email: 'admin@test.com',
       passwordHash,
       role: 'ADMIN',
