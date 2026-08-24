@@ -223,7 +223,6 @@ export const getMyActiveWaitlistOffers = async (req: AuthenticatedRequest, res: 
       where: {
         userId,
         status: 'OFFERED',
-        offerExpiresAt: { gt: now },
       },
       include: {
         show: {
@@ -240,15 +239,28 @@ export const getMyActiveWaitlistOffers = async (req: AuthenticatedRequest, res: 
     const offers = [];
 
     for (const entry of activeEntries) {
-      const showSeat = await prisma.showSeat.findFirst({
+      if (entry.offerExpiresAt && new Date(entry.offerExpiresAt) < now) {
+        continue;
+      }
+
+      let showSeat = await prisma.showSeat.findFirst({
         where: {
           showId: entry.showId,
-          status: 'HELD',
           heldByUserId: userId,
           seat: { seatCategoryId: entry.seatCategoryId },
         },
         include: { seat: true },
       });
+
+      if (!showSeat) {
+        showSeat = await prisma.showSeat.findFirst({
+          where: {
+            showId: entry.showId,
+            heldByUserId: userId,
+          },
+          include: { seat: true },
+        });
+      }
 
       if (showSeat) {
         const showPrice = entry.show.showPrices.find((sp) => sp.seatCategoryId === entry.seatCategoryId);
@@ -263,7 +275,7 @@ export const getMyActiveWaitlistOffers = async (req: AuthenticatedRequest, res: 
           seatId: showSeat.seatId,
           seatLabel: `${showSeat.seat.row}${showSeat.seat.number}`,
           price: showPrice ? Number(showPrice.price) : 0,
-          offerExpiresAt: entry.offerExpiresAt ? entry.offerExpiresAt.toISOString() : now.toISOString(),
+          offerExpiresAt: entry.offerExpiresAt ? entry.offerExpiresAt.toISOString() : new Date(Date.now() + 300000).toISOString(),
         });
       }
     }

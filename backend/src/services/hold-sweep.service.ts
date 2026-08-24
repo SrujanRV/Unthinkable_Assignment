@@ -119,6 +119,7 @@ export const startHoldSweep = (io: Server): void => {
                 heldByUserId: nextInQueue.userId,
                 heldUntil: offerExpiry.toISOString(),
               });
+              io.emit('waitlistOfferIssued', { userId: nextInQueue.userId, showId: entry.showId });
             } else {
               // No more waitlist candidates: release the seat to AVAILABLE
               await tx.showSeat.update({
@@ -241,6 +242,7 @@ export const startHoldSweep = (io: Server): void => {
                 heldByUserId: nextInQueue.userId,
                 heldUntil: offerExpiry.toISOString(),
               });
+              io.emit('waitlistOfferIssued', { userId: nextInQueue.userId, showId: ss.showId });
             });
           } else {
             // No waitlist queue: release seat to AVAILABLE
