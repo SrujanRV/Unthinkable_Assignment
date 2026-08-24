@@ -5,7 +5,7 @@ services:
     region: oregon
     plan: free
     buildCommand: npm install --include=dev && npm run backend:build
-    startCommand: cd backend && npx prisma migrate deploy && npm start
+    startCommand: cd backend && npx prisma migrate deploy && npx prisma db seed && npm start
     envVars:
       - key: PORT
         value: 10000
