@@ -16,7 +16,10 @@ services:
           name: grabaseat-db
           property: connectionString
       - key: REDIS_URL
-        value: redis://localhost:6379
+        fromService:
+          type: kv
+          name: grabaseat-kv
+          property: connectionString
       - key: JWT_SECRET
         generateValue: true
       - key: SEAT_HOLD_TTL_SECONDS
@@ -33,4 +36,8 @@ databases:
     databaseName: ticket_booking
     user: grabaseat_user
     region: oregon
+    plan: free
+
+kv:
+  - name: grabaseat-kv
     plan: free

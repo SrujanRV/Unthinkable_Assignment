@@ -50,7 +50,11 @@ const startServer = async () => {
 
     // Attempt Redis connection
     console.log('[Boot] Connecting to Redis...');
-    await redis.connect();
+    try {
+      await redis.connect();
+    } catch (err: any) {
+      console.warn('[Boot] Redis connection warning (re-trying in background):', err.message);
+    }
 
     // Start listening
     server.listen(PORT, () => {
