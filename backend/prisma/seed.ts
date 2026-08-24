@@ -25,6 +25,15 @@ async function main() {
       where: { title: { contains: 'Interstellar' } },
       data: { posterUrl: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=1200&q=80' },
     });
+    // Backfill any remaining null posterUrls by event type
+    await prisma.event.updateMany({
+      where: { type: 'CONCERT', posterUrl: null },
+      data: { posterUrl: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=1200&q=80' },
+    });
+    await prisma.event.updateMany({
+      where: { type: 'MOVIE', posterUrl: null },
+      data: { posterUrl: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=1200&q=80' },
+    });
     console.log('[Seed] Poster URLs backfilled successfully.');
     return;
   }

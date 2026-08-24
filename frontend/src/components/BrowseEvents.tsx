@@ -255,7 +255,11 @@ export default function BrowseEvents() {
               });
             });
 
-            const hasPoster = Boolean(event.posterUrl) && !failedPosters[event.id];
+            const defaultPoster = isConcert
+              ? 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=1200&q=80'
+              : 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=1200&q=80';
+            const posterSrc = (event.posterUrl && event.posterUrl.trim()) ? event.posterUrl : defaultPoster;
+            const hasPoster = !failedPosters[event.id];
             const fallbackGradient = getFallbackGradient(event.title);
 
             return (
@@ -268,7 +272,7 @@ export default function BrowseEvents() {
                   {hasPoster ? (
                     <>
                       <img
-                        src={event.posterUrl}
+                        src={posterSrc}
                         alt={event.title}
                         onError={() => setFailedPosters((prev) => ({ ...prev, [event.id]: true }))}
                         className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
