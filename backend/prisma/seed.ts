@@ -38,6 +38,16 @@ async function main() {
     },
   });
 
+  const customer2 = await prisma.user.upsert({
+    where: { email: 'customer2@test.com' },
+    update: {},
+    create: {
+      email: 'customer2@test.com',
+      passwordHash,
+      role: 'CUSTOMER',
+    },
+  });
+
   const admin = await prisma.user.upsert({
     where: { email: 'admin@test.com' },
     update: {},

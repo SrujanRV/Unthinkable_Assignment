@@ -77,6 +77,17 @@ cp .env.example .env
 
 ---
 
+### 👤 Pre-Seeded Test Credentials
+
+| Role | Email Address | Password | Purpose |
+| :--- | :--- | :--- | :--- |
+| **Customer 1** | `customer@test.com` | `password123` | Primary customer account for seat holds & booking |
+| **Customer 2** | `customer2@test.com` | `password123` | Secondary customer account for multi-browser concurrency testing |
+| **Organiser** | `organiser@test.com` | `password123` | Event hosting, event cancellation, sales metrics |
+| **Admin** | `admin@test.com` | `password123` | System health diagnostic dashboard & venue management |
+
+---
+
 ## 🚀 Setup & Execution Guide
 
 ### Option 1: Local Setup with Docker Compose (Recommended)

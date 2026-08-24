@@ -494,19 +494,26 @@ export const checkoutSeats = async (req: AuthenticatedRequest, res: Response): P
     // 8. Generate QR Code containing bookingReference
     const qrCodeDataUrl = await QRCode.toDataURL(bookingReference);
 
-    // 9. Dispatch confirmation email with attached QR Ticket
+    // 9. Dispatch confirmation email with attached QR Ticket (capped at 2s max wait)
     const seatLabels = showSeats.map((ss) => `${ss.seat.row}${ss.seat.number}`);
-    const emailPreviewUrl = await sendTicketEmail({
-      to: req.user.email,
-      bookingReference,
-      eventTitle: show.event.title,
-      venueName: show.venue.name,
-      venueLocation: show.venue.location,
-      startTime: show.startTime.toISOString(),
-      seats: seatLabels,
-      totalPrice,
-      qrCodeDataUrl,
-    });
+    let emailPreviewUrl: string | null = null;
+    try {
+      const emailPromise = sendTicketEmail({
+        to: req.user.email,
+        bookingReference,
+        eventTitle: show.event.title,
+        venueName: show.venue.name,
+        venueLocation: show.venue.location,
+        startTime: show.startTime.toISOString(),
+        seats: seatLabels,
+        totalPrice,
+        qrCodeDataUrl,
+      });
+      const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000));
+      emailPreviewUrl = await Promise.race([emailPromise, timeoutPromise]);
+    } catch (emailErr) {
+      console.error('[Booking] Non-critical email error:', emailErr);
+    }
 
     res.status(200).json({
       message: 'Booking completed successfully!',

@@ -24,9 +24,14 @@ const getTransporter = async (): Promise<nodemailer.Transporter> => {
     });
   } else {
     console.log('[Email] No SMTP credentials found. Creating an Ethereal test account...');
-    // Create an Ethereal SMTP account on the fly for local testing
     try {
-      const testAccount = await nodemailer.createTestAccount();
+      // 3-second max timeout for Ethereal account creation to prevent blocking HTTP checkouts on cloud instances
+      const testAccountPromise = nodemailer.createTestAccount();
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Ethereal test account creation timed out')), 3000)
+      );
+
+      const testAccount = await Promise.race([testAccountPromise, timeoutPromise]);
       transporter = nodemailer.createTransport({
         host: testAccount.smtp.host,
         port: testAccount.smtp.port,
@@ -37,18 +42,17 @@ const getTransporter = async (): Promise<nodemailer.Transporter> => {
         },
       });
       console.log('[Email] Ethereal test account created successfully:', testAccount.user);
-    } catch (err) {
-      console.error('[Email] Failed to create Ethereal account, falling back to console logger:', err);
+    } catch (err: any) {
+      console.warn('[Email] Ethereal account creation unavailable/timed out, using console fallback:', err?.message || err);
       // Fallback transporter that logs to console
       transporter = {
         sendMail: async (options: any) => {
           console.log('\n==================================================');
-          console.log('[FALLBACK EMAIL SENDER] Sending Email...');
+          console.log('[FALLBACK EMAIL SENDER] Ticket Email Sent');
           console.log(`To: ${options.to}`);
           console.log(`Subject: ${options.subject}`);
-          console.log(`Text: ${options.text}`);
           console.log('==================================================\n');
-          return { messageId: 'console-log-id' };
+          return { messageId: 'console-fallback-id' };
         },
       } as any;
     }
