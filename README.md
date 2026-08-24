@@ -1,145 +1,395 @@
-# Ticket Booking Platform (Movies + Concerts)
+# 🎟️ Grabaseat — High-Concurrency Ticket Booking Platform
 
-A full-stack ticket booking platform built with Node.js, Express, TypeScript, React (Vite), PostgreSQL, Prisma ORM, Redis (for seat holds + TTL), Socket.io (for realtime seat map updates), JWT authentication, Nodemailer/Resend (for email confirmations + QR code tickets), and Vitest (for backend and concurrency tests).
+Grabaseat is a high-concurrency ticket booking platform designed for movies and live concerts. It features real-time seat status synchronization, race-condition-safe seat holds using Redis distributed locks with Time-To-Live (TTL), an automated FIFO waitlist queue with cascading offers, and automated QR code entry ticket generation.
 
 ---
 
 ## 📁 Repository Structure
 
 ```
-├── backend/                  # Express API + Prisma ORM + Redis client
-│   ├── prisma/               # Database schemas and migrations
-│   └── src/                  # API routes, controllers, services, middlewares
-├── frontend/                 # React + Vite + TypeScript Client
-│   ├── src/                  # Views, Components, Assets, Realtime Socket Client
-│   └── tailwind.config.js    # Styling configuration
-├── docker-compose.yml        # Local development Postgres and Redis setup
-├── .env.example              # Documented environment variables configuration
-├── package.json              # Workspace setup and shared monorepo commands
-└── README.md                 # Project documentation
+├── backend/                  # Express API + Prisma ORM + Redis + Socket.io Server
+│   ├── prisma/               # Database schema, migrations, and realistic seed script
+│   │   ├── migrations/       # SQL migration history
+│   │   └── seed.ts           # Curated seed dataset (venues, events, shows, seats)
+│   ├── src/                  # Source code
+│   │   ├── controllers/      # Route logic (auth, shows, bookings, organiser, admin, waitlist)
+│   │   ├── middlewares/      # JWT auth and RBAC role verification
+│   │   ├── routes/           # Express router endpoints
+│   │   ├── services/         # DB (Prisma), Redis, Email (Nodemailer), Hold Sweeper
+│   │   ├── app.ts            # Express application configuration
+│   │   └── index.ts          # Server entry point + Socket.io server
+│   └── tests/                # Vitest integration & concurrency test suites
+├── frontend/                 # React + Vite + TypeScript Single Page Application
+│   ├── src/
+│   │   ├── components/       # UI components (BrowseEvents, SeatMap, MyBookings, OrganiserPanel, etc.)
+│   │   ├── context/          # Auth & Global Hold state context
+│   │   ├── App.tsx           # Main shell, navigation, dark mode, global hold banner
+│   │   └── main.tsx          # React entry point
+│   ├── tailwind.config.js    # Tailwind styling with dark mode support
+│   └── vite.config.ts        # Vite dev server + WebSocket/API reverse proxy
+├── docker-compose.yml        # PostgreSQL 15 & Redis 7 container orchestration
+├── .env.example              # Documented environment variable template
+├── SYSTEM_DESIGN.md          # Architectural deep-dive into concurrency & TTL mechanisms
+├── package.json              # Monorepo workspace configuration
+└── README.md                 # Project setup and documentation
 ```
 
 ---
 
-## 🛠️ Tech Stack & Requirements
+## 🛠️ Tech Stack & Prerequisites
 
-- **Runtime**: Node.js v20+ / npm v10+
-- **Backend**: Express.js + TypeScript
-- **Database**: PostgreSQL with Prisma ORM
-- **In-Memory Cache & Locking**: Redis (seat-hold TTL + atomic concurrency locks)
-- **Realtime**: Socket.io
-- **Frontend**: React + Vite + TypeScript + Tailwind CSS
-- **Mails & QR**: Nodemailer (Ethereal / Resend) + `qrcode` package
-- **Linting & Formatting**: ESLint + Prettier
+### Technology Stack
+- **Backend Runtime**: Node.js (v20+) with Express.js & TypeScript
+- **Database**: PostgreSQL 15+ managed via Prisma ORM
+- **Cache & Distributed Locking**: Redis 7+ (for seat hold TTLs & atomic lock acquisition)
+- **Real-Time Layer**: Socket.io 4+ (live seat map updates across connected viewers)
+- **Frontend Client**: React 18 + Vite + TypeScript + Tailwind CSS (with persistent Dark Mode)
+- **Email & QR Codes**: Nodemailer (Ethereal test accounts / SMTP) + `qrcode` SVG/PNG generation
+- **Testing**: Vitest for backend integration & stress concurrency tests
+
+### Prerequisites
+Ensure you have the following installed on your machine:
+- **Node.js**: `v20.0.0` or higher
+- **npm**: `v10.0.0` or higher
+- **Docker Desktop** (optional, recommended for database and cache orchestration)
 
 ---
 
-## 🚀 Local Development Setup
+## 🔑 Environment Variables (`.env.example`)
 
-### 1. Environment Variables Configuration
-
-Copy `.env.example` in the root folder to `.env`:
+Copy `.env.example` to create your local `.env` configuration:
 ```bash
 cp .env.example .env
 ```
 
-Review the values:
-- `DB_URL`: Points to your PostgreSQL database.
-- `REDIS_URL`: Points to your Redis cache.
-- `SEAT_HOLD_TTL_SECONDS`: Timeout for seat locks (default 600s).
-
-### 2. Database and Cache (Docker Compose)
-
-Start the local PostgreSQL and Redis servers:
-```bash
-docker compose up -d
-```
-This spins up:
-- **PostgreSQL** on port `5432` (database `ticket_booking`)
-- **Redis** on port `6379`
-
-### 3. Installation
-
-Install dependencies across all workspaces in the monorepo from the root folder:
-```bash
-npm run install:all
-```
-
-### 4. Database Migrations
-
-Generate Prisma Client and apply migrations:
-```bash
-npm run build --workspace=backend
-# Apply DB migrations (requires DB_URL connection)
-npm run db:migrate --workspace=backend
-```
-
-### 5. Running the Application
-
-To run the backend API and frontend client concurrently:
-```bash
-npm run dev
-```
-
-- **Backend API**: [http://localhost:5000](http://localhost:5000)
-- **Frontend Client**: [http://localhost:5173](http://localhost:5173)
-- **API Health check**: [http://localhost:5000/api/health](http://localhost:5000/api/health)
+| Key | Default Value | Description |
+| :--- | :--- | :--- |
+| `DB_URL` | `postgresql://postgres:postgres@localhost:5432/ticket_booking?schema=public` | PostgreSQL connection string |
+| `REDIS_URL` | `redis://localhost:6379` | Redis connection URL |
+| `JWT_SECRET` | `super-secret-jwt-signing-key-change-in-production` | Secret key for signing stateless authentication JWTs |
+| `SEAT_HOLD_TTL_SECONDS` | `600` | Seat hold lock timeout in seconds (default: 10 minutes) |
+| `OFFER_TTL_SECONDS` | `300` | Waitlist offer claim timeout in seconds (default: 5 minutes) |
+| `EMAIL_API_KEY` | `re_123456789` | Email service API key (optional for Resend integration) |
+| `EMAIL_FROM` | `tickets@yourdomain.com` | Default sender email address |
+| `PORT` | `5000` | Backend Express server port |
+| `FRONTEND_URL` | `http://localhost:5173` | Frontend application URL for CORS and email links |
+| `BACKEND_URL` | `http://localhost:5000` | Backend API base URL |
 
 ---
 
-## 🧪 Testing
+## 🚀 Setup & Execution Guide
 
-To run backend test suites (focusing on concurrency safe seat-holds and waitlist offer TTL logic):
+### Option 1: Local Setup with Docker Compose (Recommended)
+
+1. **Clone the repository and install workspace dependencies**:
+   ```bash
+   git clone https://github.com/SrujanRV/Unthinkable_Assignment.git
+   cd Unthinkable_Assignment
+   npm run install:all
+   ```
+
+2. **Start Infrastructure Services (PostgreSQL & Redis)**:
+   ```bash
+   docker compose up -d
+   ```
+   *Spins up PostgreSQL on port `5432` and Redis on port `6379`.*
+
+3. **Run Database Migrations & Seed Data**:
+   ```bash
+   # Run Prisma migrations
+   npx prisma migrate dev --schema=backend/prisma/schema.prisma
+
+   # Seed curated sample events, venues, showtimes, and seat layouts
+   npx prisma db seed --schema=backend/prisma/schema.prisma
+   ```
+
+4. **Start Development Servers**:
+   ```bash
+   npm run dev
+   ```
+   - **Frontend App**: [http://localhost:5173](http://localhost:5173)
+   - **Backend API**: [http://localhost:5000](http://localhost:5000)
+   - **Health Endpoint**: [http://localhost:5000/api/health](http://localhost:5000/api/health)
+
+---
+
+### Option 2: Full Docker Execution
+
+If you prefer running the entire application (Frontend, Backend, PostgreSQL, and Redis) in containerized environments:
+
+1. **Build and start all services via Docker Compose**:
+   ```bash
+   docker compose -f docker-compose.full.yml up --build -d
+   ```
+2. **Apply DB migrations inside the backend container**:
+   ```bash
+   docker compose exec backend npx prisma migrate deploy
+   docker compose exec backend npx prisma db seed
+   ```
+
+---
+
+## 🧪 Running Integration & Concurrency Tests
+
+Backend tests cover role-based permissions, waitlist cascading, seat cancellation, and concurrent seat hold contention:
+
 ```bash
-npm run test
+# Run all Vitest integration tests sequentially
+cd backend
+npx vitest run --no-file-parallelism
 ```
-**Vitest** handles fast in-memory execution of tests using mock dependencies.
 
 ---
 
-## 🔑 Authentication Design Decisions
+## 🗄️ Database Schema & Architecture
 
-For this application, we implemented a **stateless, access-token-only JWT authentication flow** with a 24-hour expiration window.
+```mermaid
+erDiagram
+    USER ||--o{ BOOKING : places
+    USER ||--o{ EVENT : organises
+    USER ||--o{ SHOW_SEAT : holds
+    USER ||--o{ WAITLIST_ENTRY : joins
+    
+    VENUE ||--o{ SEAT_CATEGORY : contains
+    VENUE ||--o{ SEAT : contains
+    VENUE ||--o{ SHOW : hosts
+    
+    SEAT_CATEGORY ||--o{ SEAT : defines
+    SEAT_CATEGORY ||--o{ SHOW_PRICE : prices
+    SEAT_CATEGORY ||--o{ WAITLIST_ENTRY : queues
+    
+    EVENT ||--o{ SHOW : schedules
+    
+    SHOW ||--o{ SHOW_PRICE : specifies
+    SHOW ||--o{ SHOW_SEAT : includes
+    SHOW ||--o{ BOOKING : generates
+    SHOW ||--o{ WAITLIST_ENTRY : tracks
+    
+    SEAT ||--o{ SHOW_SEAT : maps
+    
+    BOOKING ||--o{ SHOW_SEAT : reserves
+```
 
-### Why we chose this design:
-1. **Stateless Scalability**: The primary focus of a high-concurrency ticket platform is throughput and minimizing database overhead. Standard refresh token flows require token verification DB queries, tables, or blacklists. Keeping JWTs stateless allows our Express middleware to quickly authorize users by unpacking the cryptographic signature in memory without adding database read bottlenecks.
-2. **Simplified Test Harnesses**: In integration testing and concurrency stress tests, token expirations can complicate assertions. A 24-hour access token window keeps tokens stable for the lifecycle of our local developer sessions and test suites.
-3. **Roles in Claims**: The user's role (`CUSTOMER`, `ORGANISER`, or `ADMIN`) is embedded inside the JWT token claims. The backend can instantly restrict or grant route access using role-based claims in the request pipeline.
+### Table Descriptions
+
+- **`User`**: System accounts storing email, password hash, and role (`CUSTOMER`, `ORGANISER`, `ADMIN`).
+- **`Venue`**: Performance locations with name, address, and seating capacity.
+- **`SeatCategory`**: Pricing tiers within a venue (e.g. *VIP*, *Premium*, *Standard*) with multiplier rates.
+- **`Seat`**: Physical seat definitions bound to a venue, category, row identifier (e.g. `"A"`), and number (`1`).
+- **`Event`**: High-level event catalog items (movies/concerts) managed by organisers. Supports `isCancelled` flag.
+- **`Show`**: Specific scheduled showtimes for an event at a venue.
+- **`ShowPrice`**: Explicit pricing per category for a specific showtime.
+- **`ShowSeat`**: Specific seat instance for a showtime. Tracks status (`AVAILABLE`, `HELD`, `BOOKED`), `heldByUserId`, and `heldUntil`.
+- **`Booking`**: Customer transaction record storing `bookingReference`, `totalAmount`, `status` (`CONFIRMED`, `CANCELLED`), and `cancellationReason`.
+- **`WaitlistEntry`**: Queue entry for sold-out seat categories. Tracks `position`, `status` (`WAITING`, `OFFERED`, `CLAIMED`, `EXPIRED`), and `offerExpiresAt`.
 
 ---
 
-## 🛡️ Role-Based Access Control (RBAC)
+## 📡 Complete API Reference
 
-To secure user actions and protect system resources, we enforce strict role-based access control (RBAC). The backend route guards serve as the single source of truth, while the frontend hides UI elements matching unauthorized views.
+All endpoints requiring authentication expect a standard `Authorization: Bearer <JWT_TOKEN>` header.
 
-### Permissions Matrix
+### 1. Authentication Endpoints
 
-| Feature / Action | API Endpoint | CUSTOMER | ORGANISER | ADMIN |
-| :--- | :--- | :---: | :---: | :---: |
-| Browse events & shows | `GET /api/events`, `GET /api/shows/:id` | ✅ | ✅ | ✅ |
-| View seat maps & availability | `GET /api/shows/:id/seats` | ✅ | ✅ | ✅ |
-| Hold seats (10-min lock) | `POST /api/shows/:id/hold` | ✅ | ❌ (403) | ❌ (403) |
-| Release held seats | `POST /api/shows/:id/release` | ✅ | ❌ (403) | ❌ (403) |
-| Checkout & confirm booking | `POST /api/shows/:id/checkout` | ✅ | ❌ (403) | ❌ (403) |
-| Join waitlist for sold-out seats | `POST /api/shows/:id/waitlist` | ✅ | ❌ (403) | ❌ (403) |
-| View personal booking history | `GET /api/bookings` | ✅ | ❌ (403) | ❌ (403) |
-| Cancel booking & release seats | `POST /api/bookings/:id/cancel` | ✅ | ❌ (403) | ❌ (403) |
-| Access Organiser Dashboard & Sales Metrics | `GET /api/organiser/*` | ❌ (403) | ✅ | ❌ (403) |
-| Manage Venues & Seat Layouts | `POST /api/admin/*` | ❌ (403) | ❌ (403) | ✅ |
-| View System Health Metrics | `GET /api/health` | ❌ (403) | ❌ (403) | ✅ |
+#### `POST /api/auth/register`
+- **Auth**: Public
+- **Request Body**:
+  ```json
+  {
+    "email": "user@example.com",
+    "password": "secretpassword",
+    "role": "CUSTOMER"
+  }
+  ```
+  *(Role can be `CUSTOMER` or `ORGANISER`)*
+- **Response** (`201 Created`):
+  ```json
+  {
+    "token": "eyJhbGciOi...",
+    "user": { "id": "usr_123", "email": "user@example.com", "role": "CUSTOMER" }
+  }
+  ```
+
+#### `POST /api/auth/login`
+- **Auth**: Public
+- **Request Body**:
+  ```json
+  { "email": "user@example.com", "password": "secretpassword" }
+  ```
+- **Response** (`200 OK`):
+  ```json
+  {
+    "token": "eyJhbGciOi...",
+    "user": { "id": "usr_123", "email": "user@example.com", "role": "CUSTOMER" }
+  }
+  ```
+
+#### `GET /api/auth/me`
+- **Auth**: Required (`CUSTOMER`, `ORGANISER`, `ADMIN`)
+- **Response** (`200 OK`):
+  ```json
+  { "user": { "id": "usr_123", "email": "user@example.com", "role": "CUSTOMER" } }
+  ```
 
 ---
 
+### 2. Events & Showtimes (Browse Directory)
 
-## 🔒 Concurrency-Safe Seat Holds (System Design)
+#### `GET /api/events`
+- **Auth**: Required (`CUSTOMER`, `ORGANISER`, `ADMIN`)
+- **Query Parameters**: `type` (optional: `MOVIE` \| `CONCERT`), `search` (optional keyword)
+- **Response** (`200 OK`): Returns list of active, non-cancelled events with venue and upcoming showtimes.
 
-To ensure that two simultaneous customers racing to select and reserve the exact same seat never both succeed, we chose **Redis-based Distributed Locking with TTL** using the atomic `SETNX` (Set if Not Exists) operation.
+#### `GET /api/shows/:showId`
+- **Auth**: Required (`CUSTOMER`, `ORGANISER`, `ADMIN`)
+- **Response** (`200 OK`): Detailed show object including event metadata, venue details, and category pricing (`showPrices`).
 
-### Why Redis SETNX over Postgres SELECT ... FOR UPDATE?
-1. **Single-threaded Event Loop**: Redis executes incoming operations sequentially on a single thread. This ensures that even if two requests arrive at the exact same microsecond, Redis processes one first, guaranteeing order of execution.
-2. **Atomic Write-and-Check**: The command `SET show:{showId}:seat:{seatId}:hold {userId} EX {ttl} NX` combines validation and writing into a single CPU instruction at the cache layer. 
-   - If the seat is free, it locks it for the user and returns `OK`.
-   - If the seat is already held, the command immediately returns `null` (fails), refusing to modify the state.
-3. **High Throughput & Database Isolation**: Under high concurrency (e.g., concert ticket drops), database lock operations like `SELECT ... FOR UPDATE` on Postgres can degrade performance and lead to deadlocks or database connection pool exhaustion. Offloading active lock contention to Redis keeps the database light and scales to thousands of concurrent requests per second. While `SELECT ... FOR UPDATE` is a reliable choice for strictly SQL-only transactional safety, using Redis as the high-throughput lock engine ensures we do not block heavy transactional operations on Postgres.
-4. **All-or-Nothing Hold Atomicity**: When a user selects multiple seats (e.g., A1, A2, A3) and submits them in a single hold request, the backend attempts to lock each seat in Redis sequentially. If *any* of the seats fail to lock (because it's already held by another user), the backend rolls back all successfully acquired locks in that batch (by deleting the keys) and fails the request with a `409 Conflict` status containing the `conflictingSeatIds`. This guarantees all-or-nothing atomicity.
-5. **Background Expiry Sweeper**: Redis handles lock expiration natively using `EX` (TTL). To keep PostgreSQL durable states in sync, a background cron sweeps PostgreSQL `ShowSeat` records whose `heldUntil` timestamp has passed, double-checks if the lock has expired in Redis, releases the SQL record if so, and broadcasts a Socket.io `seatStatusUpdate` to notify all browsing clients of the seat release in real-time.
+#### `GET /api/shows/:showId/seats`
+- **Auth**: Required (`CUSTOMER`, `ORGANISER`, `ADMIN`)
+- **Response** (`200 OK`):
+  ```json
+  {
+    "seats": [
+      {
+        "id": "ss_123",
+        "seatId": "seat_456",
+        "row": "A",
+        "number": 1,
+        "categoryId": "cat_789",
+        "categoryName": "VIP",
+        "status": "AVAILABLE",
+        "heldByUserId": null,
+        "heldUntil": null
+      }
+    ]
+  }
+  ```
+
+---
+
+### 3. Seat Holds & Checkout Flow
+
+#### `POST /api/shows/:showId/hold`
+- **Auth**: Required (`CUSTOMER` only)
+- **Request Body**:
+  ```json
+  { "seatIds": ["seat_456", "seat_457"] }
+  ```
+- **Response** (`200 OK`):
+  ```json
+  {
+    "message": "Seats held successfully",
+    "heldUntil": "2026-08-24T06:40:00.000Z"
+  }
+  ```
+- **Error** (`409 Conflict`): Returned if any seat in the batch is held/booked by another user:
+  ```json
+  {
+    "error": {
+      "message": "1 seat(s) in your selection were just taken by another user.",
+      "conflictingSeatIds": ["seat_456"],
+      "status": 409
+    }
+  }
+  ```
+
+#### `POST /api/shows/:showId/release`
+- **Auth**: Required (`CUSTOMER` only)
+- **Request Body**:
+  ```json
+  { "seatIds": ["seat_456"] }
+  ```
+- **Response** (`200 OK`): `{ "message": "Seats released successfully" }`
+
+#### `POST /api/shows/:showId/checkout`
+- **Auth**: Required (`CUSTOMER` only)
+- **Request Body**:
+  ```json
+  { "seatIds": ["seat_456", "seat_457"] }
+  ```
+- **Response** (`200 OK`):
+  ```json
+  {
+    "booking": {
+      "id": "bkg_789",
+      "bookingReference": "GB-8F92A1",
+      "totalPrice": 75.00,
+      "seats": ["A1", "A2"],
+      "emailPreviewUrl": "https://ethereal.email/message/...",
+      "qrCodeDataUrl": "data:image/png;base64,..."
+    }
+  }
+  ```
+
+---
+
+### 4. Bookings & User History
+
+#### `GET /api/bookings`
+- **Auth**: Required (`CUSTOMER` only)
+- **Response** (`200 OK`): Returns customer's booking history with show details, seat numbers, cancellation status, and cancellation reasons.
+
+#### `POST /api/bookings/:id/cancel`
+- **Auth**: Required (`CUSTOMER` only)
+- **Response** (`200 OK`): Cancels the booking, releases all associated seats, sets `cancellationReason = "Cancelled by customer"`, and updates live seat maps.
+
+---
+
+### 5. Waitlist & Priority Queue
+
+#### `POST /api/shows/:showId/waitlist`
+- **Auth**: Required (`CUSTOMER` only)
+- **Request Body**:
+  ```json
+  { "seatCategoryId": "cat_789" }
+  ```
+- **Response** (`200 OK`):
+  ```json
+  {
+    "message": "Successfully joined the waitlist",
+    "waitlistEntry": { "id": "wl_123", "position": 1, "status": "WAITING" }
+  }
+  ```
+
+#### `GET /api/shows/:showId/waitlist/claim`
+- **Auth**: Required (`CUSTOMER` only)
+- **Query Parameter**: `token` (signed claim JWT)
+- **Response** (`200 OK`): Converts waitlist offer to confirmed hold and returns hold details.
+
+---
+
+### 6. Organiser Management
+
+#### `POST /api/organiser/events`
+- **Auth**: Required (`ORGANISER` only)
+- **Request Body**: Event title, description, type (`MOVIE` \| `CONCERT`), showtimes array, and category pricing.
+
+#### `POST /api/organiser/events/:id/cancel`
+- **Auth**: Required (`ORGANISER` only)
+- **Response** (`200 OK`): Marks event as cancelled, cancels all associated confirmed bookings, releases all held seats, sets `cancellationReason = "Event cancelled by organiser"`, dispatches refund notification emails to affected customers, and broadcasts real-time seat updates.
+
+#### `GET /api/organiser/metrics`
+- **Auth**: Required (`ORGANISER` only)
+- **Response** (`200 OK`): Returns sales summaries, active bookings count, total revenue generated, and seat occupancy percentages across organiser's events.
+
+---
+
+### 7. Administration & Health
+
+#### `GET /api/venues`
+- **Auth**: Required (`ADMIN` or `ORGANISER`)
+- **Response** (`200 OK`): List of available venue layouts and seat configurations.
+
+#### `POST /api/admin/venues`
+- **Auth**: Required (`ADMIN` only)
+- **Request Body**: Venue name, location, and seat layout matrix.
+
+#### `GET /api/health`
+- **Auth**: Required (`ADMIN` only)
+- **Response** (`200 OK`): System diagnostic metrics (PostgreSQL status, Redis ping, active connections, node uptime).
+
+---
+
+## 🔒 Deep Dive: Seat Hold TTL & Waitlist Logic
+
+For a detailed technical architectural write-up on race-safety, Redis atomic `SETNX` locking, batch atomicity, and waitlist offer cascading, see **[SYSTEM_DESIGN.md](file:///c:/Users/sruja/Desktop/Unthinkable_Assignment/SYSTEM_DESIGN.md)**.
