@@ -17,8 +17,8 @@ services:
           property: connectionString
       - key: REDIS_URL
         fromService:
-          type: kv
-          name: grabaseat-kv
+          type: redis
+          name: grabaseat-redis
           property: connectionString
       - key: JWT_SECRET
         generateValue: true
@@ -31,13 +31,15 @@ services:
       - key: BACKEND_URL
         value: https://grabaseat-backend.onrender.com
 
+  - type: redis
+    name: grabaseat-redis
+    region: oregon
+    plan: free
+    ipAllowList: []
+
 databases:
   - name: grabaseat-db
     databaseName: ticket_booking
     user: grabaseat_user
     region: oregon
-    plan: free
-
-kv:
-  - name: grabaseat-kv
     plan: free
