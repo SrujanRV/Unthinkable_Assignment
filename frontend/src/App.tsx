@@ -125,10 +125,10 @@ function MainContent() {
         <div className="sm:mx-auto sm:w-full sm:max-w-md text-center mb-8">
           <span className="text-6xl">🎟️</span>
           <h2 className="mt-4 text-3xl font-extrabold text-white tracking-tight">
-            Antigravity Tickets
+            Grabaseat
           </h2>
           <p className="mt-2 text-sm text-indigo-300">
-            High-Concurrency Ticket Booking Platform
+            Movies &amp; concerts — book in seconds
           </p>
         </div>
 
@@ -154,7 +154,7 @@ function MainContent() {
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-2.5">
               <span className="text-2xl">🎟️</span>
-              <span className="font-extrabold text-white text-lg tracking-tight">Antigravity Tickets</span>
+              <span className="font-extrabold text-white text-lg tracking-tight">Grabaseat</span>
             </div>
 
             {/* Navigation Tabs */}
@@ -315,23 +315,23 @@ function MainContent() {
 
       {/* Global Hold Pop-up / Banner */}
       {globalHold && (!selectedShow || selectedShow.showId !== globalHold.showId || activeTab !== 'dashboard') && (
-        <div className="fixed bottom-4 right-4 z-50 max-w-sm w-full bg-amber-50 border border-amber-300 rounded-xl shadow-lg p-4">
+        <div className="fixed bottom-4 right-4 z-50 max-w-sm w-full bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 rounded-xl shadow-lg p-4 transition-colors">
           <div className="flex items-start gap-3">
-            <Clock className="w-5 h-5 text-amber-600 mt-0.5 animate-pulse flex-shrink-0" />
+            <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 animate-pulse flex-shrink-0" />
             <div className="flex-1">
-              <h4 className="font-bold text-amber-900 text-sm">Waiting Confirmation</h4>
-              <p className="text-xs text-amber-700 mt-1">
-                You held seats <strong className="text-amber-900 font-mono">{globalHold.seatIds.join(', ')}</strong>. Complete booking before it expires.
+              <h4 className="font-bold text-amber-900 dark:text-amber-200 text-sm">Waiting Confirmation</h4>
+              <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                You held seats <strong className="text-amber-900 dark:text-amber-200 font-mono">{globalHold.seatIds.join(', ')}</strong>. Complete booking before it expires.
               </p>
               <div className="mt-3 flex items-center justify-between gap-2">
-                <span className="text-xs font-mono font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded border border-amber-250">
+                <span className="text-xs font-mono font-bold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/50 px-2 py-0.5 rounded border border-amber-250 dark:border-amber-700">
                   {formatCountdown(globalCountdown)}
                 </span>
                 <div className="flex gap-2">
                   <button
                     onClick={handleCancelGlobalHold}
                     disabled={globalConfirmLoading}
-                    className="text-xs font-semibold px-2 py-1 text-amber-700 hover:bg-amber-100 rounded border border-amber-200 transition-colors disabled:opacity-50"
+                    className="text-xs font-semibold px-2 py-1 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 rounded border border-amber-200 dark:border-amber-700 transition-colors disabled:opacity-50"
                   >
                     Cancel Hold
                   </button>

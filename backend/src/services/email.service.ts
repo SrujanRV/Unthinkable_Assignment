@@ -78,10 +78,10 @@ export const sendTicketEmail = async (args: SendTicketEmailArgs): Promise<string
     const qrBuffer = Buffer.from(base64Data, 'base64');
 
     const mailOptions = {
-      from: '"Antigravity Tickets" <noreply@antigravitytickets.com>',
+      from: '"Grabaseat" <noreply@grabaseat.com>',
       to: args.to,
       subject: `🎟️ Your Tickets for ${args.eventTitle} (Ref: ${args.bookingReference})`,
-      text: `Hello,\n\nYour booking is confirmed! Reference: ${args.bookingReference}\nEvent: ${args.eventTitle}\nVenue: ${args.venueName}\nSeats: ${args.seats.join(', ')}\nTotal: $${args.totalPrice.toFixed(2)}\nShowtime: ${new Date(args.startTime).toLocaleString()}\n\nScan the attached QR code at the entrance.`,
+      text: `Hello,\n\nYour booking is confirmed! Reference: ${args.bookingReference}\nEvent: ${args.eventTitle}\nVenue: ${args.venueName}\nSeats: ${args.seats.join(', ')}\nTotal: $${args.totalPrice.toFixed(2)}\nShowtime: ${new Date(args.startTime).toLocaleString()}\n\nScan the attached QR code at the entrance.\n\nThanks for booking with Grabaseat!`,
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1)">
           <div style="background-color: #312e81; padding: 24px; text-align: center; color: white;">
@@ -97,7 +97,7 @@ export const sendTicketEmail = async (args: SendTicketEmailArgs): Promise<string
                 <td><strong>${args.venueName}</strong> (${args.venueLocation})</td>
               </tr>
               <tr>
-                <td style="color: #6b7280; font-weight: bold;">Date & Time:</td>
+                <td style="color: #6b7280; font-weight: bold;">Date &amp; Time:</td>
                 <td>${new Date(args.startTime).toLocaleString()}</td>
               </tr>
               <tr>
@@ -116,7 +116,7 @@ export const sendTicketEmail = async (args: SendTicketEmailArgs): Promise<string
             </div>
           </div>
           <div style="background-color: #f9fafb; padding: 16px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 12px; color: #6b7280;">
-            Thank you for booking with Antigravity Tickets!
+            Thank you for booking with <strong>Grabaseat</strong>!
           </div>
         </div>
       `,
@@ -158,7 +158,7 @@ export const sendEventCancellationEmail = async (args: {
     const client = await getTransporter();
 
     const mailOptions = {
-      from: '"Antigravity Tickets" <noreply@antigravitytickets.com>',
+      from: '"Grabaseat" <noreply@grabaseat.com>',
       to: args.to,
       subject: `⚠️ IMPORTANT: Event Cancelled - ${args.eventTitle} (Ref: ${args.bookingReference})`,
       text: `Hello,\n\nWe regret to inform you that the event "${args.eventTitle}" scheduled for ${new Date(args.startTime).toLocaleString()} has been cancelled by the organiser.\n\nYour booking (Reference: ${args.bookingReference}) for seats ${args.seats.join(', ')} has been cancelled. A refund of $${args.refundAmount.toFixed(2)} is being processed.\n\nWe apologize for the inconvenience.`,
@@ -196,7 +196,7 @@ export const sendEventCancellationEmail = async (args: {
             <p style="font-size: 13px; color: #4b5563;">If you have any questions, please contact the event organiser directly. We apologize for any inconvenience caused.</p>
           </div>
           <div style="background-color: #f9fafb; padding: 16px; text-align: center; border-top: 1px solid #fee2e2; font-size: 12px; color: #6b7280;">
-            Antigravity Tickets Support
+            Grabaseat Support — We're sorry for the inconvenience.
           </div>
         </div>
       `,

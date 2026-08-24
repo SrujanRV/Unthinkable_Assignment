@@ -34,7 +34,7 @@ export default function LoginPage({ onToggleMode }: LoginPageProps) {
     <div className="w-full max-w-md p-8 bg-white dark:bg-slate-800 rounded-xl shadow-md border border-gray-150 dark:border-slate-700 transition-colors">
       <div className="text-center mb-6">
         <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Welcome Back</h2>
-        <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">Sign in to book your tickets</p>
+        <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">Sign in to your Grabaseat account</p>
       </div>
 
       {error && (

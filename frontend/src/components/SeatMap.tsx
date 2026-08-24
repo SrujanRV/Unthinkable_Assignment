@@ -364,11 +364,11 @@ export default function SeatMap({ showId, eventId, venueName, onBack }: SeatMapP
   // ── SUCCESS VIEW ──────────────────────────────────────────────────────────
   if (view === 'success' && bookingResult) {
     return (
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden max-w-md mx-auto my-8">
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden max-w-md mx-auto my-8 transition-colors">
         <div className="bg-emerald-600 px-6 py-8 text-white text-center">
           <CheckCircle2 className="w-16 h-16 mx-auto mb-3 text-emerald-100" />
           <h3 className="text-2xl font-bold">Booking Confirmed!</h3>
-          <p className="text-xs text-emerald-100 mt-1">Thank you for booking with Antigravity Tickets</p>
+          <p className="text-xs text-emerald-100 mt-1">Thank you for booking with Grabaseat</p>
         </div>
         <div className="p-6 space-y-6">
           <div className="space-y-3">
@@ -376,21 +376,21 @@ export default function SeatMap({ showId, eventId, venueName, onBack }: SeatMapP
               ['Booking Reference', <strong key="ref" className="font-mono">{bookingResult.bookingReference}</strong>],
               ['Venue', venueName],
               ['Seats Booked', bookingResult.seats.join(', ')],
-              ['Amount Paid', <strong key="amt" className="text-emerald-600">${bookingResult.totalPrice.toFixed(2)}</strong>],
+              ['Amount Paid', <strong key="amt" className="text-emerald-600 dark:text-emerald-400">${bookingResult.totalPrice.toFixed(2)}</strong>],
             ] as [string, React.ReactNode][]).map(([label, val], i) => (
-              <div key={i} className="flex justify-between items-center text-xs text-gray-500 pb-2 border-b border-gray-100">
-                <span>{label}</span><span className="text-sm text-gray-800">{val}</span>
+              <div key={i} className="flex justify-between items-center text-xs text-gray-500 dark:text-slate-400 pb-2 border-b border-gray-100 dark:border-slate-700">
+                <span>{label}</span><span className="text-sm text-gray-800 dark:text-gray-100">{val}</span>
               </div>
             ))}
           </div>
-          <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl text-center space-y-2">
-            <span className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Your Ticket QR Entry</span>
-            <img src={bookingResult.qrCodeDataUrl} alt="Ticket QR Code" className="w-48 h-48 mx-auto border-2 border-white rounded shadow-sm" />
-            <p className="text-[10px] text-gray-400">Scan this QR code at the event entrance.</p>
+          <div className="p-4 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-xl text-center space-y-2">
+            <span className="block text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">Your Ticket QR Entry</span>
+            <img src={bookingResult.qrCodeDataUrl} alt="Ticket QR Code" className="w-48 h-48 mx-auto border-2 border-white dark:border-slate-600 rounded shadow-sm" />
+            <p className="text-[10px] text-gray-400 dark:text-slate-500">Scan this QR code at the event entrance.</p>
           </div>
           {bookingResult.emailPreviewUrl && (
             <a href={bookingResult.emailPreviewUrl} target="_blank" rel="noreferrer"
-              className="flex items-center justify-center gap-1.5 w-full py-2.5 bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 rounded-lg text-xs font-bold transition-colors">
+              className="flex items-center justify-center gap-1.5 w-full py-2.5 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 rounded-lg text-xs font-bold transition-colors">
               <Mail className="w-4 h-4" /> View Confirmation Email <ExternalLink className="w-3.5 h-3.5" />
             </a>
           )}
@@ -407,7 +407,7 @@ export default function SeatMap({ showId, eventId, venueName, onBack }: SeatMapP
   if (view === 'checkout') {
     const isExpiringSoon = countdown > 0 && countdown <= 60;
     return (
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden max-w-lg mx-auto my-8">
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden max-w-lg mx-auto my-8 transition-colors">
         <div className="bg-indigo-900 px-6 py-4 text-white flex items-center justify-between">
           <div>
             <h3 className="text-lg font-bold flex items-center gap-2">
@@ -415,7 +415,6 @@ export default function SeatMap({ showId, eventId, venueName, onBack }: SeatMapP
             </h3>
             <p className="text-xs text-indigo-200 mt-0.5">Complete before your hold expires</p>
           </div>
-          {/* Countdown derived from server heldUntil — not page-load time */}
           <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-mono font-bold text-sm ${
             isExpiringSoon
               ? 'bg-red-600 border-red-500 text-white animate-pulse'
@@ -428,43 +427,43 @@ export default function SeatMap({ showId, eventId, venueName, onBack }: SeatMapP
 
         <div className="p-6 space-y-5">
           {error && (
-            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+            <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-xs text-red-700 dark:text-red-400">
               <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />{error}
             </div>
           )}
           {isExpiringSoon && (
-            <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+            <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg text-xs text-amber-800 dark:text-amber-300">
               <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
               <span><strong>Hurry!</strong> Your hold expires in under a minute.</span>
             </div>
           )}
 
           <div className="space-y-2">
-            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">Held Seats</h4>
-            <div className="rounded-lg border border-gray-200 overflow-hidden">
+            <h4 className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">Held Seats</h4>
+            <div className="rounded-lg border border-gray-200 dark:border-slate-600 overflow-hidden">
               {heldSeatIds.map((seatId) => {
                 const seat = seats.find((s) => s.seatId === seatId);
                 return (
-                  <div key={seatId} className="flex justify-between items-center px-4 py-2.5 border-b border-gray-100 last:border-0 text-sm">
+                  <div key={seatId} className="flex justify-between items-center px-4 py-2.5 border-b border-gray-100 dark:border-slate-700 last:border-0 text-sm dark:bg-slate-700/50">
                     <div className="flex items-center gap-2">
-                      <span className="font-bold text-gray-800">Seat {seat?.row}{seat?.number}</span>
-                      <span className="text-[10px] bg-gray-100 text-gray-600 border border-gray-200 px-1.5 py-0.5 rounded uppercase font-semibold">{seat?.categoryName}</span>
+                      <span className="font-bold text-gray-800 dark:text-gray-100">Seat {seat?.row}{seat?.number}</span>
+                      <span className="text-[10px] bg-gray-100 dark:bg-slate-600 text-gray-600 dark:text-slate-300 border border-gray-200 dark:border-slate-500 px-1.5 py-0.5 rounded uppercase font-semibold">{seat?.categoryName}</span>
                     </div>
-                    <span className="font-bold text-indigo-600">${getPrice(seatId).toFixed(2)}</span>
+                    <span className="font-bold text-indigo-600 dark:text-indigo-400">${getPrice(seatId).toFixed(2)}</span>
                   </div>
                 );
               })}
             </div>
           </div>
 
-          <div className="flex justify-between items-center pt-2 border-t border-gray-200 font-bold text-base text-gray-800">
+          <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-slate-600 font-bold text-base text-gray-800 dark:text-gray-100">
             <span>Total</span>
-            <span className="text-indigo-600 text-xl">${getTotalPrice(heldSeatIds).toFixed(2)}</span>
+            <span className="text-indigo-600 dark:text-indigo-400 text-xl">${getTotalPrice(heldSeatIds).toFixed(2)}</span>
           </div>
 
           <div className="flex gap-3 pt-1">
             <button onClick={handleCancelHold} disabled={loading || checkoutLoading}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg font-semibold text-sm transition-colors disabled:opacity-50">
+              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-700 rounded-lg font-semibold text-sm transition-colors disabled:opacity-50">
               <Trash2 className="w-4 h-4" /> Cancel Hold
             </button>
             <button onClick={handleConfirmBooking} disabled={loading || checkoutLoading || countdown === 0}
@@ -474,7 +473,7 @@ export default function SeatMap({ showId, eventId, venueName, onBack }: SeatMapP
             </button>
           </div>
 
-          <div className="p-3 rounded-lg border border-amber-200 bg-amber-50 text-xs text-amber-800 flex items-start gap-2">
+          <div className="p-3 rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
             <ShieldAlert className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-500" />
             <span><strong>Hold Policy:</strong> Your seats are server-locked for {formatTime(countdown)}. Cancelling immediately frees them for other users.</span>
           </div>
@@ -485,7 +484,7 @@ export default function SeatMap({ showId, eventId, venueName, onBack }: SeatMapP
 
   // ── MAP VIEW — client-side selection only ─────────────────────────────────
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden transition-colors">
       <div className="bg-indigo-900 px-6 py-4 text-white flex items-center justify-between">
         <div>
           <h3 className="text-lg font-bold flex items-center gap-2">🛋️ Seating Map</h3>
@@ -501,13 +500,13 @@ export default function SeatMap({ showId, eventId, venueName, onBack }: SeatMapP
         {/* Seat grid */}
         <div className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between mb-2">
-            <h4 className="font-bold text-gray-800 text-sm">Select Your Seats</h4>
-            <div className="text-xs text-gray-400 flex items-center gap-1.5">
+            <h4 className="font-bold text-gray-800 dark:text-gray-100 text-sm">Select Your Seats</h4>
+            <div className="text-xs text-gray-400 dark:text-slate-500 flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5" /><span>Hold created only when you proceed</span>
             </div>
           </div>
 
-          <div className="p-8 border border-gray-200 rounded-xl bg-gray-900 overflow-x-auto min-h-[300px] flex flex-col items-center justify-center relative select-none">
+          <div className="p-8 border border-gray-200 dark:border-slate-700 rounded-xl bg-gray-900 overflow-x-auto min-h-[300px] flex flex-col items-center justify-center relative select-none">
             <div className="w-2/3 h-2 bg-indigo-500/20 border-b border-indigo-500 rounded-full text-center text-[10px] text-indigo-300 font-bold uppercase tracking-widest pb-4 mb-10">
               STAGE / SCREEN
             </div>
@@ -544,38 +543,38 @@ export default function SeatMap({ showId, eventId, venueName, onBack }: SeatMapP
           </div>
 
           {/* Legend */}
-          <div className="p-4 bg-gray-50 border border-gray-150 rounded-xl flex flex-wrap gap-4 items-center justify-center text-xs">
-            <span className="font-semibold text-gray-500 mr-2">Legend:</span>
+          <div className="p-4 bg-gray-50 dark:bg-slate-700 border border-gray-150 dark:border-slate-600 rounded-xl flex flex-wrap gap-4 items-center justify-center text-xs">
+            <span className="font-semibold text-gray-500 dark:text-slate-400 mr-2">Legend:</span>
             {categoryOrder.map((catId) => (
               <div key={catId} className="flex items-center gap-1.5">
                 <span className={`w-3.5 h-3.5 rounded border ${getCategoryLegendColor(catId)}`}></span>
-                <span>{categoryStatus[catId]?.name ?? catId} (Available)</span>
+                <span className="text-gray-600 dark:text-slate-300">{categoryStatus[catId]?.name ?? catId} (Available)</span>
               </div>
             ))}
             <div className="flex items-center gap-1.5">
               <span className="w-3.5 h-3.5 bg-indigo-600 border border-indigo-700 rounded"></span>
-              <span>Selected</span>
+              <span className="text-gray-600 dark:text-slate-300">Selected</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-3.5 h-3.5 bg-gray-300 border border-gray-400 rounded"></span>
-              <span>Held by Others</span>
+              <span className="text-gray-600 dark:text-slate-300">Held by Others</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-3.5 h-3.5 bg-red-500 border border-red-600 rounded"></span>
-              <span>Booked</span>
+              <span className="text-gray-600 dark:text-slate-300">Booked</span>
             </div>
           </div>
         </div>
 
         {/* Sidebar */}
         <div className="space-y-6">
-          <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 space-y-4">
-            <h4 className="font-bold text-gray-800 text-sm flex items-center gap-1.5">
+          <div className="p-4 bg-gray-50 dark:bg-slate-700 rounded-xl border border-gray-200 dark:border-slate-600 space-y-4">
+            <h4 className="font-bold text-gray-800 dark:text-gray-100 text-sm flex items-center gap-1.5">
               <ShoppingCart className="w-4.5 h-4.5 text-indigo-500" /> Your Selection
             </h4>
 
             {selectedSeatIds.length === 0 ? (
-              <div className="py-6 text-center text-gray-400 text-xs">
+              <div className="py-6 text-center text-gray-400 dark:text-slate-500 text-xs">
                 Click available seats on the map to select them.<br />
                 <span className="text-indigo-400 font-semibold">No hold is created until you proceed.</span>
               </div>
@@ -585,13 +584,13 @@ export default function SeatMap({ showId, eventId, venueName, onBack }: SeatMapP
                   {selectedSeatIds.map((id) => {
                     const seat = seats.find((s) => s.seatId === id);
                     return (
-                      <div key={id} className="flex justify-between items-center p-2 bg-white border border-gray-200 rounded-lg text-xs">
+                      <div key={id} className="flex justify-between items-center p-2 bg-white dark:bg-slate-600 border border-gray-200 dark:border-slate-500 rounded-lg text-xs">
                         <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-gray-800">Seat {seat?.row}{seat?.number}</span>
-                          <span className="text-[9px] bg-gray-100 text-gray-600 border border-gray-200 px-1 py-0.5 rounded uppercase font-semibold">{seat?.categoryName}</span>
+                          <span className="font-bold text-gray-800 dark:text-gray-100">Seat {seat?.row}{seat?.number}</span>
+                          <span className="text-[9px] bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300 border border-gray-200 dark:border-slate-500 px-1 py-0.5 rounded uppercase font-semibold">{seat?.categoryName}</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-indigo-600">${getPrice(id).toFixed(2)}</span>
+                          <span className="font-bold text-indigo-600 dark:text-indigo-400">${getPrice(id).toFixed(2)}</span>
                           <button onClick={() => setSelectedSeatIds((prev) => prev.filter((x) => x !== id))}
                             className="text-gray-400 hover:text-red-500 transition-colors text-base leading-none">×</button>
                         </div>
@@ -600,9 +599,9 @@ export default function SeatMap({ showId, eventId, venueName, onBack }: SeatMapP
                   })}
                 </div>
 
-                <div className="pt-3 border-t border-gray-200 flex justify-between items-center font-bold text-sm text-gray-800">
+                <div className="pt-3 border-t border-gray-200 dark:border-slate-600 flex justify-between items-center font-bold text-sm text-gray-800 dark:text-gray-100">
                   <span>Total</span>
-                  <span className="text-indigo-600 text-lg">${getTotalPrice(selectedSeatIds).toFixed(2)}</span>
+                  <span className="text-indigo-600 dark:text-indigo-400 text-lg">${getTotalPrice(selectedSeatIds).toFixed(2)}</span>
                 </div>
 
                 <button onClick={handleProceedToBooking} disabled={loading}
@@ -610,7 +609,7 @@ export default function SeatMap({ showId, eventId, venueName, onBack }: SeatMapP
                   {loading ? <Loader className="w-4 h-4 animate-spin" /> : <UserCheck className="w-4 h-4" />}
                   Proceed to Booking
                 </button>
-                <p className="text-[10px] text-gray-400 text-center">
+                <p className="text-[10px] text-gray-400 dark:text-slate-500 text-center">
                   All seats held atomically — if any conflict, none are held.
                 </p>
               </div>
@@ -618,15 +617,15 @@ export default function SeatMap({ showId, eventId, venueName, onBack }: SeatMapP
           </div>
 
           {soldOutCategories.length > 0 && (
-            <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-200 space-y-3">
-              <h4 className="font-bold text-indigo-900 text-xs flex items-center gap-1.5">
-                <Users className="w-4.5 h-4.5 text-indigo-600" /> Queue Waitlist Active
+            <div className="p-4 bg-indigo-50 dark:bg-indigo-900/30 rounded-xl border border-indigo-200 dark:border-indigo-700 space-y-3">
+              <h4 className="font-bold text-indigo-900 dark:text-indigo-300 text-xs flex items-center gap-1.5">
+                <Users className="w-4.5 h-4.5 text-indigo-600 dark:text-indigo-400" /> Queue Waitlist Active
               </h4>
-              <p className="text-[10px] text-indigo-700">Join the waitlist for priority offers when seats free up.</p>
+              <p className="text-[10px] text-indigo-700 dark:text-indigo-400">Join the waitlist for priority offers when seats free up.</p>
               <div className="space-y-2">
                 {soldOutCategories.map((catId) => (
-                  <div key={catId} className="flex justify-between items-center p-2.5 bg-white border border-indigo-150 rounded-lg text-xs">
-                    <span className="font-bold text-gray-700">{categoryStatus[catId].name}</span>
+                  <div key={catId} className="flex justify-between items-center p-2.5 bg-white dark:bg-slate-700 border border-indigo-150 dark:border-indigo-700 rounded-lg text-xs">
+                    <span className="font-bold text-gray-700 dark:text-gray-200">{categoryStatus[catId].name}</span>
                     <button onClick={() => handleJoinWaitlist(catId)} disabled={loading}
                       className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-[10px] font-bold transition-colors">
                       Join Queue
@@ -637,7 +636,7 @@ export default function SeatMap({ showId, eventId, venueName, onBack }: SeatMapP
             </div>
           )}
 
-          <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 text-xs text-amber-800 flex items-start gap-2">
+          <div className="p-4 rounded-xl border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
             <ShieldAlert className="w-4.5 h-4.5 mt-0.5 flex-shrink-0 text-amber-500" />
             <div>
               <span className="font-bold">Hold Policy:</span> Proceeding atomically holds <em>all</em> selected seats or <em>none</em>.
