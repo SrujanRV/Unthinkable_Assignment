@@ -35,6 +35,7 @@ export default function MyBookings() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedQrCodeRef, setSelectedQrCodeRef] = useState<string | null>(null);
+  const [filterTab, setFilterTab] = useState<'active' | 'cancelled'>('active');
 
   const fetchBookings = async () => {
     setLoading(true);
@@ -53,20 +54,23 @@ export default function MyBookings() {
   }, []);
 
   const handleCancel = async (bookingId: string) => {
-    const confirmCancel = window.confirm('Are you sure you want to cancel this booking? This will release your seats immediately.');
-    if (!confirmCancel) return;
-
+    if (!confirm('Are you sure you want to cancel this booking? Held seats will be offered to waiting queue.')) return;
     setLoading(true);
     setError(null);
     try {
       await axios.post(`/api/bookings/${bookingId}/cancel`);
       alert('Booking cancelled successfully! Any queue waitlists will be offered these seats.');
+      setSelectedQrCodeRef(null);
       fetchBookings();
     } catch (err: any) {
       setError(err.response?.data?.error?.message || 'Failed to cancel booking');
       setLoading(false);
     }
   };
+
+  const activeBookings = bookings.filter((b) => b.status === 'CONFIRMED');
+  const cancelledBookings = bookings.filter((b) => b.status === 'CANCELLED');
+  const displayedBookings = filterTab === 'active' ? activeBookings : cancelledBookings;
 
   if (loading && bookings.length === 0) {
     return (
@@ -80,10 +84,32 @@ export default function MyBookings() {
   return (
     <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden transition-colors">
       {/* Header Banner */}
-      <div className="bg-indigo-900 px-6 py-4 text-white flex items-center justify-between">
+      <div className="bg-indigo-900 px-6 py-4 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold flex items-center gap-2">🎟️ My Booked Tickets</h2>
           <p className="text-xs text-indigo-200">View and manage your upcoming movie &amp; concert bookings</p>
+        </div>
+        <div className="flex bg-indigo-950/60 p-1 rounded-lg border border-indigo-700/50">
+          <button
+            onClick={() => setFilterTab('active')}
+            className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${
+              filterTab === 'active'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-indigo-200 hover:text-white'
+            }`}
+          >
+            Active Tickets ({activeBookings.length})
+          </button>
+          <button
+            onClick={() => setFilterTab('cancelled')}
+            className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${
+              filterTab === 'cancelled'
+                ? 'bg-red-600 text-white shadow-sm'
+                : 'text-indigo-200 hover:text-white'
+            }`}
+          >
+            Cancelled ({cancelledBookings.length})
+          </button>
         </div>
       </div>
 
@@ -94,15 +120,19 @@ export default function MyBookings() {
           </div>
         )}
 
-        {bookings.length === 0 ? (
+        {displayedBookings.length === 0 ? (
           <div className="p-12 text-center text-gray-400 dark:text-slate-500 border-2 border-dashed border-gray-200 dark:border-slate-700 rounded-lg space-y-2">
             <Ticket className="w-12 h-12 mx-auto text-gray-300 dark:text-slate-600" />
-            <p className="text-sm font-semibold">No bookings found</p>
-            <p className="text-xs max-w-xs mx-auto">You haven&apos;t booked any tickets yet. Head over to the Dashboard to search for active events!</p>
+            <p className="text-sm font-semibold">No {filterTab} bookings found</p>
+            <p className="text-xs max-w-xs mx-auto">
+              {filterTab === 'active'
+                ? "You don't have any active bookings right now."
+                : "You haven't cancelled any bookings."}
+            </p>
           </div>
         ) : (
           <div className="space-y-6">
-            {bookings.map((booking) => {
+            {displayedBookings.map((booking) => {
               const show = booking.show;
               const seatLabels = booking.showSeats.map((ss) => `${ss.seat.row}${ss.seat.number}`).join(', ');
               const isUpcoming = new Date(show.startTime) > new Date();

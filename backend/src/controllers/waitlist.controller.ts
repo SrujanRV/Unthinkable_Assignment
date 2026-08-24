@@ -3,6 +3,7 @@ import { prisma } from '../services/db.service';
 import { redis } from '../services/redis.service';
 import { AuthenticatedRequest } from '../middlewares/auth.middleware';
 import { sendTicketEmail } from '../services/email.service';
+import { offerSeatToWaitlistOrRelease } from '../services/waitlist-offer.service';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import QRCode from 'qrcode';
@@ -160,97 +161,10 @@ export const cancelBooking = async (req: AuthenticatedRequest, res: Response): P
       });
 
       // Release seats and offer to waitlisted users if queue exists
+      const io = req.app.get('io');
       for (const showSeat of booking.showSeats) {
         const catId = showSeat.seat.seatCategoryId;
-
-        // Check if there is an active waitlisted customer (FIFO: position ascending)
-        const nextInQueue = await tx.waitlistEntry.findFirst({
-          where: {
-            showId: booking.showId,
-            seatCategoryId: catId,
-            status: 'WAITING',
-          },
-          orderBy: { position: 'asc' },
-          include: { user: true },
-        });
-
-        if (nextInQueue) {
-          const offerExpiry = new Date(Date.now() + OFFER_TTL_SECONDS * 1000);
-
-          // Update next queue position to OFFERED
-          await tx.waitlistEntry.update({
-            where: { id: nextInQueue.id },
-            data: {
-              status: 'OFFERED',
-              offerExpiresAt: offerExpiry,
-            },
-          });
-
-          // Lock seat for this waitlisted user inside PostgreSQL (held status)
-          await tx.showSeat.update({
-            where: { id: showSeat.id },
-            data: {
-              status: 'HELD',
-              heldByUserId: nextInQueue.userId,
-              heldUntil: offerExpiry,
-              bookingId: null, // Clear old booking reference
-            },
-          });
-
-          // Set Redis lock key for nextInQueue.userId
-          const lockKey = `show:${booking.showId}:seat:${showSeat.seatId}:hold`;
-          await redis.set(lockKey, nextInQueue.userId, 'EX', OFFER_TTL_SECONDS, 'NX');
-
-          // Generate signed waitlist claim token
-          const token = generateClaimToken(nextInQueue.userId, booking.showId, showSeat.seatId, nextInQueue.id);
-          const claimUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/?claimToken=${token}`;
-
-          // Dispatch Offer email to waitlisted user
-          await sendTicketEmail({
-            to: nextInQueue.user.email,
-            bookingReference: `WL-OFFER-${nextInQueue.id.slice(0, 8)}`,
-            eventTitle: booking.show.event.title,
-            venueName: booking.showSeats[0].seat.category.name, // Display tier
-            venueLocation: `Waitlist Offer: Claim inside ${OFFER_TTL_SECONDS / 60} minutes`,
-            startTime: booking.show.startTime.toISOString(),
-            seats: [`${showSeat.seat.row}${showSeat.seat.number}`],
-            totalPrice: Number(booking.totalAmount) / booking.showSeats.length, // Avg seat price
-            qrCodeDataUrl: await require('qrcode').toDataURL(claimUrl), // QR points to claim URL!
-          });
-
-          // Broadcast HELD status to active socket room clients
-          const io = req.app.get('io');
-          if (io) {
-            io.to(`show:${booking.showId}`).emit('seatStatusChanged', {
-              seatId: showSeat.seatId,
-              status: 'HELD',
-              heldByUserId: nextInQueue.userId,
-              heldUntil: offerExpiry.toISOString(),
-            });
-          }
-        } else {
-          // No waitlist queue: return seat to AVAILABLE state
-          await tx.showSeat.update({
-            where: { id: showSeat.id },
-            data: {
-              status: 'AVAILABLE',
-              heldByUserId: null,
-              heldUntil: null,
-              bookingId: null,
-            },
-          });
-
-          // Broadcast AVAILABLE status via Socket.io
-          const io = req.app.get('io');
-          if (io) {
-            io.to(`show:${booking.showId}`).emit('seatStatusChanged', {
-              seatId: showSeat.seatId,
-              status: 'AVAILABLE',
-              heldByUserId: null,
-              heldUntil: null,
-            });
-          }
-        }
+        await offerSeatToWaitlistOrRelease(tx, booking.showId, showSeat.seatId, catId, showSeat.id, io);
       }
     });
 
@@ -406,57 +320,8 @@ export const cancelWaitlistOffer = async (req: AuthenticatedRequest, res: Respon
         const lockKey = `show:${entry.showId}:seat:${showSeat.seatId}:hold`;
         await redis.del(lockKey);
 
-        const nextInQueue = await tx.waitlistEntry.findFirst({
-          where: {
-            showId: entry.showId,
-            seatCategoryId: entry.seatCategoryId,
-            status: 'WAITING',
-          },
-          orderBy: { position: 'asc' },
-          include: { user: true },
-        });
-
-        if (nextInQueue) {
-          const offerExpiry = new Date(Date.now() + OFFER_TTL_SECONDS * 1000);
-          await tx.waitlistEntry.update({
-            where: { id: nextInQueue.id },
-            data: { status: 'OFFERED', offerExpiresAt: offerExpiry },
-          });
-
-          await tx.showSeat.update({
-            where: { id: showSeat.id },
-            data: { status: 'HELD', heldByUserId: nextInQueue.userId, heldUntil: offerExpiry },
-          });
-
-          const newLockKey = `show:${entry.showId}:seat:${showSeat.seatId}:hold`;
-          await redis.set(newLockKey, nextInQueue.userId, 'EX', OFFER_TTL_SECONDS);
-
-          const io = req.app.get('io');
-          if (io) {
-            io.to(`show:${entry.showId}`).emit('seatStatusChanged', {
-              seatId: showSeat.seatId,
-              status: 'HELD',
-              heldByUserId: nextInQueue.userId,
-              heldUntil: offerExpiry.toISOString(),
-            });
-            io.emit('waitlistOfferIssued', { userId: nextInQueue.userId, showId: entry.showId });
-          }
-        } else {
-          await tx.showSeat.update({
-            where: { id: showSeat.id },
-            data: { status: 'AVAILABLE', heldByUserId: null, heldUntil: null },
-          });
-
-          const io = req.app.get('io');
-          if (io) {
-            io.to(`show:${entry.showId}`).emit('seatStatusChanged', {
-              seatId: showSeat.seatId,
-              status: 'AVAILABLE',
-              heldByUserId: null,
-              heldUntil: null,
-            });
-          }
-        }
+        const io = req.app.get('io');
+        await offerSeatToWaitlistOrRelease(tx, entry.showId, showSeat.seatId, entry.seatCategoryId, showSeat.id, io);
       }
     });
 

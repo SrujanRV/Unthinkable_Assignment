@@ -5,6 +5,7 @@ import { AuthenticatedRequest } from '../middlewares/auth.middleware';
 import crypto from 'crypto';
 import QRCode from 'qrcode';
 import { sendTicketEmail } from '../services/email.service';
+import { offerSeatToWaitlistOrRelease } from '../services/waitlist-offer.service';
 
 const SEAT_HOLD_TTL_SECONDS = Number(process.env.SEAT_HOLD_TTL_SECONDS) || 600; // 10 minutes default
 
@@ -298,34 +299,25 @@ export const releaseSeats = async (req: AuthenticatedRequest, res: Response): Pr
       await redis.del(...keysToDelete);
     }
 
-    // 2. Update PostgreSQL durable statuses (only where held by current user)
+    // 2. Update PostgreSQL durable statuses and trigger waitlist offers
     if (seatsToRelease.length > 0) {
-      await prisma.showSeat.updateMany({
+      const showSeats = await prisma.showSeat.findMany({
         where: {
           showId,
           seatId: { in: seatsToRelease },
           heldByUserId: userId,
           status: 'HELD',
         },
-        data: {
-          status: 'AVAILABLE',
-          heldByUserId: null,
-          heldUntil: null,
-        },
+        include: { seat: true },
       });
 
-      // 3. Broadcast release updates via Socket.io
       const io = req.app.get('io');
-      if (io) {
-        seatsToRelease.forEach((seatId) => {
-          io.to(`show:${showId}`).emit('seatStatusChanged', {
-            seatId,
-            status: 'AVAILABLE',
-            heldByUserId: null,
-            heldUntil: null,
-          });
-        });
-      }
+
+      await prisma.$transaction(async (tx) => {
+        for (const ss of showSeats) {
+          await offerSeatToWaitlistOrRelease(tx, showId, ss.seatId, ss.seat.seatCategoryId, ss.id, io);
+        }
+      });
     }
 
     res.status(200).json({ message: 'Seats released successfully' });
