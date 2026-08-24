@@ -118,6 +118,7 @@ export default function SeatMap({ showId, eventId, venueName, onBack }: SeatMapP
     socketRef.current = socket;
 
     const joinRoom = () => {
+      console.log(`[Socket.io Client] Emitting joinShow for room show:${showId}`);
       socket.emit('joinShow', showId);
     };
 
@@ -130,6 +131,7 @@ export default function SeatMap({ showId, eventId, venueName, onBack }: SeatMapP
       seatId: string; status: 'AVAILABLE' | 'HELD' | 'BOOKED';
       heldByUserId: string | null; heldUntil: string | null;
     }) => {
+      console.log('[Socket.io Client] Received seatStatusChanged event:', data);
       setSeats((prev) =>
         prev.map((s) => s.seatId === data.seatId
           ? { ...s, status: data.status, heldByUserId: data.heldByUserId, heldUntil: data.heldUntil }

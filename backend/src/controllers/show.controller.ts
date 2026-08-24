@@ -231,6 +231,7 @@ export const holdSeats = async (req: AuthenticatedRequest, res: Response): Promi
     // 4. Broadcast live update to other clients in this show room via Socket.io
     const io = req.app.get('io');
     if (io) {
+      console.log(`[Socket.io Broadcast] Emitting seatStatusChanged for show:${showId}, seats:`, seatIds);
       seatIds.forEach((seatId) => {
         io.to(`show:${showId}`).emit('seatStatusChanged', {
           seatId,
@@ -239,6 +240,8 @@ export const holdSeats = async (req: AuthenticatedRequest, res: Response): Promi
           heldUntil: holdExpiry.toISOString(),
         });
       });
+    } else {
+      console.error('[Socket.io Error] io instance NOT found on req.app');
     }
 
     res.status(200).json({

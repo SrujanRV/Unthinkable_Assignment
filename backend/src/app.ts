@@ -15,16 +15,10 @@ dotenv.config();
 
 const app: Express = express();
 
-const allowedOrigins = [
-  'http://localhost:5173',
-  'http://127.0.0.1:5173',
-  process.env.FRONTEND_URL,
-].filter(Boolean) as string[];
-
 // Configure middlewares
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin: (origin, callback) => callback(null, true),
     credentials: true,
   })
 );
