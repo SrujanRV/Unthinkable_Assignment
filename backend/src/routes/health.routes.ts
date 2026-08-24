@@ -1,12 +1,9 @@
 import { Router } from 'express';
 import { checkHealth } from '../controllers/health.controller';
-import { authenticateJWT, requireRoles } from '../middlewares/auth.middleware';
 
 const router = Router();
 
-router.use(authenticateJWT as any);
-router.use(requireRoles(['ADMIN']) as any);
-
+// Public health diagnostic endpoint (for uptime monitors & keep-alive pings)
 router.get('/', checkHealth as any);
 
 
