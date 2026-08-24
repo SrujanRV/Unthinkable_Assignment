@@ -449,17 +449,13 @@ export const checkoutSeats = async (req: AuthenticatedRequest, res: Response): P
         },
       });
 
-      // Mark matching waitlist entries as CONFIRMED if user was waitlisted
+      // Delete matching waitlist entries if user was waitlisted (fulfilled)
       const categoryIds = showSeats.map((ss) => ss.seat.seatCategoryId);
-      await tx.waitlistEntry.updateMany({
+      await tx.waitlistEntry.deleteMany({
         where: {
           showId,
           userId,
           seatCategoryId: { in: categoryIds },
-          status: 'OFFERED',
-        },
-        data: {
-          status: 'CONFIRMED',
         },
       });
 

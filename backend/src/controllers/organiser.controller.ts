@@ -401,9 +401,8 @@ export const cancelEvent = async (req: AuthenticatedRequest, res: Response): Pro
         });
 
         // II. Cancel all waitlist entries in Postgres
-        await tx.waitlistEntry.updateMany({
+        await tx.waitlistEntry.deleteMany({
           where: { showId: show.id },
-          data: { status: 'EXPIRED' },
         });
 
         // III. Cancel all confirmed bookings for this show
