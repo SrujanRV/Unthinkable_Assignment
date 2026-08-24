@@ -80,7 +80,7 @@ export const getShowSeatsMap = async (req: Request, res: Response): Promise<void
       if (results) {
         for (let i = 0; i < keys.length; i++) {
           const key = keys[i];
-          const seatId = key.split(':')[4];
+          const seatId = key.split(':')[3]; // show:{showId}:seat:{seatId}:hold -> index 3 is seatId
           const getResult = results[i * 2];
           const ttlResult = results[i * 2 + 1];
 
@@ -107,9 +107,14 @@ export const getShowSeatsMap = async (req: Request, res: Response): Promise<void
         const now = new Date();
         heldUntil = new Date(now.getTime() + redisHold.ttl * 1000);
       } else if (currentStatus === 'HELD') {
-        currentStatus = 'AVAILABLE';
-        heldByUserId = null;
-        heldUntil = null;
+        const now = new Date();
+        if (heldUntil && heldUntil > now) {
+          currentStatus = 'HELD';
+        } else {
+          currentStatus = 'AVAILABLE';
+          heldByUserId = null;
+          heldUntil = null;
+        }
       }
 
       return {
