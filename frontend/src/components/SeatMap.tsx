@@ -111,9 +111,21 @@ export default function SeatMap({ showId, eventId, venueName, onBack }: SeatMapP
   useEffect(() => {
     fetchSeatMap();
 
-    const socket = io(BACKEND_URL, { auth: { token } });
+    const socket = io(BACKEND_URL, {
+      auth: { token },
+      transports: ['websocket', 'polling'],
+    });
     socketRef.current = socket;
-    socket.on('connect', () => socket.emit('joinShow', showId));
+
+    const joinRoom = () => {
+      socket.emit('joinShow', showId);
+    };
+
+    if (socket.connected) {
+      joinRoom();
+    }
+    socket.on('connect', joinRoom);
+
     socket.on('seatStatusChanged', (data: {
       seatId: string; status: 'AVAILABLE' | 'HELD' | 'BOOKED';
       heldByUserId: string | null; heldUntil: string | null;
@@ -134,7 +146,7 @@ export default function SeatMap({ showId, eventId, venueName, onBack }: SeatMapP
       socket.emit('leaveShow', showId);
       socket.disconnect();
     };
-  }, [showId, token]);
+  }, [showId, token, fetchSeatMap]);
 
   // ── Countdown — derived from server heldUntil, NOT from page-load time ────
   const handleExpiry = useCallback(async () => {
@@ -346,7 +358,7 @@ export default function SeatMap({ showId, eventId, venueName, onBack }: SeatMapP
     if (seat.status === 'BOOKED') return 'bg-red-500 border-red-600 text-white cursor-not-allowed opacity-80';
     if (seat.status === 'HELD') {
       if (isHeldByMe) return 'bg-amber-500 border-amber-600 text-white animate-pulse';
-      return 'bg-gray-300 border-gray-400 text-gray-500 cursor-not-allowed';
+      return 'bg-slate-400 dark:bg-slate-700 border-slate-500 dark:border-slate-600 text-slate-200 dark:text-slate-400 cursor-not-allowed opacity-60';
     }
     return getCategoryPalette(seat.categoryId);
   };
