@@ -113,7 +113,7 @@ export const startHoldSweep = (io: Server): void => {
               });
 
               // Broadcast live seat status update
-              io.to(`show:${entry.showId}`).emit('seatStatusUpdate', {
+              io.to(`show:${entry.showId}`).emit('seatStatusChanged', {
                 seatId: showSeat.seatId,
                 status: 'HELD',
                 heldByUserId: nextInQueue.userId,

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import LoginPage from './components/LoginPage';
 import RegisterPage from './components/RegisterPage';
@@ -9,6 +9,7 @@ import BrowseEvents from './components/BrowseEvents';
 import MyBookings from './components/MyBookings';
 import { LogOut, User, Activity, Shield, LayoutGrid, Music, Ticket, Clock, Moon, Sun } from 'lucide-react';
 import axios from 'axios';
+import { io } from 'socket.io-client';
 
 function MainContent() {
   const { isAuthenticated, user, logout, loading, globalHold, setGlobalHold, selectedShow, setSelectedShow } = useAuth();
@@ -94,19 +95,41 @@ function MainContent() {
   const [offerCountdown, setOfferCountdown] = useState<number>(300);
   const [offerActionLoading, setOfferActionLoading] = useState<boolean>(false);
 
-  const fetchWaitlistOffers = async () => {
+  const fetchWaitlistOffers = useCallback(async () => {
     if (!user || user.role !== 'CUSTOMER') return;
     try {
       const res = await axios.get<{ offers: any[] }>('/api/shows/waitlist/my-offers');
       setWaitlistOffers(res.data.offers || []);
     } catch (e) {}
-  };
+  }, [user]);
 
   useEffect(() => {
     fetchWaitlistOffers();
-    const interval = setInterval(fetchWaitlistOffers, 4000);
-    return () => clearInterval(interval);
-  }, [user]);
+    const interval = setInterval(fetchWaitlistOffers, 3000);
+
+    const socketUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    const socket = io(socketUrl, {
+      auth: { token: localStorage.getItem('token') },
+      transports: ['websocket', 'polling'],
+    });
+
+    socket.on('waitlistOfferIssued', (data: { userId?: string }) => {
+      if (!data.userId || data.userId === user?.id) {
+        fetchWaitlistOffers();
+      }
+    });
+
+    socket.on('seatStatusChanged', (data: any) => {
+      if (data.heldByUserId === user?.id) {
+        fetchWaitlistOffers();
+      }
+    });
+
+    return () => {
+      clearInterval(interval);
+      socket.disconnect();
+    };
+  }, [user, fetchWaitlistOffers]);
 
   useEffect(() => {
     if (waitlistOffers.length === 0) return;
