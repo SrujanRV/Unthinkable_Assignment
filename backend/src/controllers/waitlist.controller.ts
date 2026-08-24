@@ -302,9 +302,8 @@ export const cancelWaitlistOffer = async (req: AuthenticatedRequest, res: Respon
     }
 
     await prisma.$transaction(async (tx) => {
-      await tx.waitlistEntry.update({
+      await tx.waitlistEntry.delete({
         where: { id: waitlistEntryId },
-        data: { status: 'EXPIRED' },
       });
 
       const showSeat = await tx.showSeat.findFirst({
@@ -406,9 +405,8 @@ export const confirmWaitlistOffer = async (req: AuthenticatedRequest, res: Respo
         },
       });
 
-      await tx.waitlistEntry.update({
+      await tx.waitlistEntry.delete({
         where: { id: waitlistEntryId },
-        data: { status: 'CONFIRMED' },
       });
 
       return b;

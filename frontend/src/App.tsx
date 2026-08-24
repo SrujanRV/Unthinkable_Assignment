@@ -435,7 +435,7 @@ function MainContent() {
 
       {/* Waitlist Offer Pop-up / Banner */}
       {waitlistOffers.length > 0 && (
-        <div className="fixed bottom-4 left-4 z-50 max-w-sm w-full bg-gradient-to-r from-indigo-900 to-indigo-950 text-white border border-indigo-500/50 rounded-xl shadow-2xl p-4 transition-all animate-bounce">
+        <div className="fixed bottom-4 left-4 z-50 max-w-sm w-full bg-gradient-to-r from-indigo-900 to-indigo-950 text-white border border-indigo-500/50 rounded-xl shadow-2xl p-4 transition-all">
           <div className="flex items-start gap-3">
             <Ticket className="w-6 h-6 text-amber-400 mt-0.5 flex-shrink-0 animate-pulse" />
             <div className="flex-1">
