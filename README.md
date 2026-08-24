@@ -1,5 +1,9 @@
 # 🎟️ Grabaseat — High-Concurrency Ticket Booking Platform
 
+> 🌐 **Live Application**: [https://grabaseat.vercel.app](https://grabaseat.vercel.app)  
+> ⚡ **Backend API Server**: [https://grabaseat-backend.onrender.com](https://grabaseat-backend.onrender.com)  
+> 🏥 **Health & Status Ping**: [https://grabaseat-backend.onrender.com/api/health](https://grabaseat-backend.onrender.com/api/health)
+
 Grabaseat is a high-concurrency ticket booking platform designed for movies and live concerts. It features real-time seat status synchronization, race-condition-safe seat holds using Redis distributed locks with Time-To-Live (TTL), an automated FIFO waitlist queue with cascading offers, and automated QR code entry ticket generation.
 
 ---
