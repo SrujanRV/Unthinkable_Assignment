@@ -19,8 +19,11 @@ function MainContent() {
   const isAdmin = user?.role === 'ADMIN';
   const isOrganiser = user?.role === 'ORGANISER';
 
-  // Dark mode — persisted to localStorage, applied to <html> element
-  const [darkMode, setDarkMode] = useState<boolean>(() => localStorage.getItem('darkMode') === 'true');
+  // Dark mode — persisted to localStorage (defaulting to true), applied to <html> element
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    const saved = localStorage.getItem('darkMode');
+    return saved !== null ? saved === 'true' : true;
+  });
   useEffect(() => {
     if (darkMode) {
       document.documentElement.classList.add('dark');
