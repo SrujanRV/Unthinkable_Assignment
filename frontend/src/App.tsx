@@ -7,7 +7,7 @@ import AdminPanel from './components/AdminPanel';
 import OrganiserPanel from './components/OrganiserPanel';
 import BrowseEvents from './components/BrowseEvents';
 import MyBookings from './components/MyBookings';
-import { LogOut, User, Activity, Shield, LayoutGrid, Music, Ticket, Clock } from 'lucide-react';
+import { LogOut, User, Activity, Shield, LayoutGrid, Music, Ticket, Clock, Moon, Sun } from 'lucide-react';
 import axios from 'axios';
 
 function MainContent() {
@@ -17,6 +17,17 @@ function MainContent() {
 
   const isAdmin = user?.role === 'ADMIN';
   const isOrganiser = user?.role === 'ORGANISER';
+
+  // Dark mode — persisted to localStorage, applied to <html> element
+  const [darkMode, setDarkMode] = useState<boolean>(() => localStorage.getItem('darkMode') === 'true');
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    localStorage.setItem('darkMode', String(darkMode));
+  }, [darkMode]);
 
   const [globalCountdown, setGlobalCountdown] = useState<number>(0);
 
@@ -136,7 +147,7 @@ function MainContent() {
 
   // Logged-in View
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors duration-200">
       {/* Header bar */}
       <header className="bg-gradient-to-r from-slate-900 to-indigo-950 sticky top-0 z-50 shadow-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -228,6 +239,15 @@ function MainContent() {
               </span>
             </div>
 
+            {/* Dark mode toggle */}
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              className="flex items-center justify-center w-8 h-8 rounded-lg text-white/70 hover:text-white hover:bg-white/10 border border-white/15 transition-colors focus:outline-none"
+              title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
+
             <button
               onClick={logout}
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-white/80 hover:text-white hover:bg-white/10 rounded-lg border border-white/15 transition-colors focus:outline-none"
@@ -282,8 +302,8 @@ function MainContent() {
 
         {activeTab === 'health' && isAdmin && (
           <div>
-            <div className="border-b border-gray-200 pb-3 mb-6">
-              <h2 className="text-lg font-bold text-gray-800 flex items-center gap-1.5">
+            <div className="border-b border-gray-200 dark:border-slate-700 pb-3 mb-6">
+              <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100 flex items-center gap-1.5">
                 <Activity className="w-5 h-5 text-indigo-500" />
                 Service Health Metrics
               </h2>
