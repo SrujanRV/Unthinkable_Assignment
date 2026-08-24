@@ -1,11 +1,15 @@
 import { Router } from 'express';
 import { getShowDetails, getShowSeatsMap, holdSeats, releaseSeats, checkoutSeats } from '../controllers/show.controller';
-import { joinWaitlist } from '../controllers/waitlist.controller';
+import { joinWaitlist, getMyActiveWaitlistOffers, cancelWaitlistOffer, confirmWaitlistOffer } from '../controllers/waitlist.controller';
 import { authenticateJWT, requireRoles } from '../middlewares/auth.middleware';
 
 const router = Router();
 
 router.use(authenticateJWT as any);
+
+router.get('/waitlist/my-offers', requireRoles(['CUSTOMER']) as any, getMyActiveWaitlistOffers as any);
+router.post('/waitlist/offers/:waitlistEntryId/cancel', requireRoles(['CUSTOMER']) as any, cancelWaitlistOffer as any);
+router.post('/waitlist/offers/:waitlistEntryId/confirm', requireRoles(['CUSTOMER']) as any, confirmWaitlistOffer as any);
 
 router.get('/:showId', getShowDetails as any);
 router.get('/:showId/seats', getShowSeatsMap as any);

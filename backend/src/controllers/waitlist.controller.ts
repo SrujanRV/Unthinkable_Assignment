@@ -4,6 +4,8 @@ import { redis } from '../services/redis.service';
 import { AuthenticatedRequest } from '../middlewares/auth.middleware';
 import { sendTicketEmail } from '../services/email.service';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
+import QRCode from 'qrcode';
 
 const OFFER_TTL_SECONDS = Number(process.env.OFFER_TTL_SECONDS) || 300; // 5 minutes default
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecret';
@@ -290,5 +292,303 @@ export const listMyBookings = async (req: AuthenticatedRequest, res: Response): 
   } catch (error) {
     console.error('[Booking] List error:', error);
     res.status(500).json({ error: { message: 'Internal server error listing bookings', status: 500 } });
+  }
+};
+
+export const getMyActiveWaitlistOffers = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  if (!req.user) {
+    res.status(401).json({ error: { message: 'Unauthorized', status: 401 } });
+    return;
+  }
+
+  const userId = req.user.id;
+  const now = new Date();
+
+  try {
+    const activeEntries = await prisma.waitlistEntry.findMany({
+      where: {
+        userId,
+        status: 'OFFERED',
+        offerExpiresAt: { gt: now },
+      },
+      include: {
+        show: {
+          include: {
+            event: { select: { id: true, title: true, type: true } },
+            venue: { select: { id: true, name: true, location: true } },
+            showPrices: true,
+          },
+        },
+        category: { select: { id: true, name: true } },
+      },
+    });
+
+    const offers = [];
+
+    for (const entry of activeEntries) {
+      const showSeat = await prisma.showSeat.findFirst({
+        where: {
+          showId: entry.showId,
+          status: 'HELD',
+          heldByUserId: userId,
+          seat: { seatCategoryId: entry.seatCategoryId },
+        },
+        include: { seat: true },
+      });
+
+      if (showSeat) {
+        const showPrice = entry.show.showPrices.find((sp) => sp.seatCategoryId === entry.seatCategoryId);
+        offers.push({
+          waitlistEntryId: entry.id,
+          showId: entry.showId,
+          eventId: entry.show.eventId,
+          eventTitle: entry.show.event.title,
+          venueName: entry.show.venue.name,
+          seatCategoryId: entry.seatCategoryId,
+          categoryName: entry.category.name,
+          seatId: showSeat.seatId,
+          seatLabel: `${showSeat.seat.row}${showSeat.seat.number}`,
+          price: showPrice ? Number(showPrice.price) : 0,
+          offerExpiresAt: entry.offerExpiresAt ? entry.offerExpiresAt.toISOString() : now.toISOString(),
+        });
+      }
+    }
+
+    res.status(200).json({ offers });
+  } catch (error) {
+    console.error('[Waitlist] Get my offers error:', error);
+    res.status(500).json({ error: { message: 'Internal server error fetching waitlist offers', status: 500 } });
+  }
+};
+
+export const cancelWaitlistOffer = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const { waitlistEntryId } = req.params;
+
+  if (!req.user) {
+    res.status(401).json({ error: { message: 'Unauthorized', status: 401 } });
+    return;
+  }
+
+  const userId = req.user.id;
+
+  try {
+    const entry = await prisma.waitlistEntry.findUnique({
+      where: { id: waitlistEntryId },
+      include: { category: true },
+    });
+
+    if (!entry || entry.userId !== userId) {
+      res.status(404).json({ error: { message: 'Waitlist offer not found', status: 404 } });
+      return;
+    }
+
+    if (entry.status !== 'OFFERED') {
+      res.status(400).json({ error: { message: 'Waitlist entry is not an active offer', status: 400 } });
+      return;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.waitlistEntry.update({
+        where: { id: waitlistEntryId },
+        data: { status: 'EXPIRED' },
+      });
+
+      const showSeat = await tx.showSeat.findFirst({
+        where: {
+          showId: entry.showId,
+          status: 'HELD',
+          heldByUserId: userId,
+          seat: { seatCategoryId: entry.seatCategoryId },
+        },
+      });
+
+      if (showSeat) {
+        const lockKey = `show:${entry.showId}:seat:${showSeat.seatId}:hold`;
+        await redis.del(lockKey);
+
+        const nextInQueue = await tx.waitlistEntry.findFirst({
+          where: {
+            showId: entry.showId,
+            seatCategoryId: entry.seatCategoryId,
+            status: 'WAITING',
+          },
+          orderBy: { position: 'asc' },
+          include: { user: true },
+        });
+
+        if (nextInQueue) {
+          const offerExpiry = new Date(Date.now() + OFFER_TTL_SECONDS * 1000);
+          await tx.waitlistEntry.update({
+            where: { id: nextInQueue.id },
+            data: { status: 'OFFERED', offerExpiresAt: offerExpiry },
+          });
+
+          await tx.showSeat.update({
+            where: { id: showSeat.id },
+            data: { status: 'HELD', heldByUserId: nextInQueue.userId, heldUntil: offerExpiry },
+          });
+
+          const newLockKey = `show:${entry.showId}:seat:${showSeat.seatId}:hold`;
+          await redis.set(newLockKey, nextInQueue.userId, 'EX', OFFER_TTL_SECONDS);
+
+          const io = req.app.get('io');
+          if (io) {
+            io.to(`show:${entry.showId}`).emit('seatStatusChanged', {
+              seatId: showSeat.seatId,
+              status: 'HELD',
+              heldByUserId: nextInQueue.userId,
+              heldUntil: offerExpiry.toISOString(),
+            });
+            io.emit('waitlistOfferIssued', { userId: nextInQueue.userId, showId: entry.showId });
+          }
+        } else {
+          await tx.showSeat.update({
+            where: { id: showSeat.id },
+            data: { status: 'AVAILABLE', heldByUserId: null, heldUntil: null },
+          });
+
+          const io = req.app.get('io');
+          if (io) {
+            io.to(`show:${entry.showId}`).emit('seatStatusChanged', {
+              seatId: showSeat.seatId,
+              status: 'AVAILABLE',
+              heldByUserId: null,
+              heldUntil: null,
+            });
+          }
+        }
+      }
+    });
+
+    res.status(200).json({ message: 'Waitlist offer cancelled. Passed to next in queue.' });
+  } catch (error) {
+    console.error('[Waitlist] Cancel offer error:', error);
+    res.status(500).json({ error: { message: 'Internal server error cancelling waitlist offer', status: 500 } });
+  }
+};
+
+export const confirmWaitlistOffer = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const { waitlistEntryId } = req.params;
+
+  if (!req.user) {
+    res.status(401).json({ error: { message: 'Unauthorized', status: 401 } });
+    return;
+  }
+
+  const userId = req.user.id;
+
+  try {
+    const entry = await prisma.waitlistEntry.findUnique({
+      where: { id: waitlistEntryId },
+      include: {
+        show: {
+          include: {
+            event: true,
+            venue: true,
+            showPrices: true,
+          },
+        },
+      },
+    });
+
+    if (!entry || entry.userId !== userId) {
+      res.status(404).json({ error: { message: 'Waitlist offer not found', status: 404 } });
+      return;
+    }
+
+    if (entry.status !== 'OFFERED') {
+      res.status(400).json({ error: { message: 'Waitlist offer is no longer active', status: 400 } });
+      return;
+    }
+
+    const showSeat = await prisma.showSeat.findFirst({
+      where: {
+        showId: entry.showId,
+        status: 'HELD',
+        heldByUserId: userId,
+        seat: { seatCategoryId: entry.seatCategoryId },
+      },
+      include: { seat: true },
+    });
+
+    if (!showSeat) {
+      res.status(400).json({ error: { message: 'Offered seat is no longer available', status: 400 } });
+      return;
+    }
+
+    const showPriceObj = entry.show.showPrices.find((sp) => sp.seatCategoryId === entry.seatCategoryId);
+    const seatPrice = showPriceObj ? Number(showPriceObj.price) : 0;
+    const bookingReference = 'BK-WL-' + crypto.randomBytes(3).toString('hex').toUpperCase();
+
+    const booking = await prisma.$transaction(async (tx) => {
+      const b = await tx.booking.create({
+        data: {
+          bookingReference,
+          userId,
+          showId: entry.showId,
+          status: 'CONFIRMED',
+          totalAmount: seatPrice,
+        },
+      });
+
+      await tx.showSeat.update({
+        where: { id: showSeat.id },
+        data: {
+          status: 'BOOKED',
+          bookingId: b.id,
+          heldByUserId: null,
+          heldUntil: null,
+        },
+      });
+
+      await tx.waitlistEntry.update({
+        where: { id: waitlistEntryId },
+        data: { status: 'CONFIRMED' },
+      });
+
+      return b;
+    });
+
+    const lockKey = `show:${entry.showId}:seat:${showSeat.seatId}:hold`;
+    await redis.del(lockKey);
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`show:${entry.showId}`).emit('seatStatusChanged', {
+        seatId: showSeat.seatId,
+        status: 'BOOKED',
+        heldByUserId: null,
+        heldUntil: null,
+      });
+    }
+
+    const seatLabel = `${showSeat.seat.row}${showSeat.seat.number}`;
+    const qrCodeDataUrl = await QRCode.toDataURL(bookingReference);
+
+    sendTicketEmail({
+      to: req.user.email,
+      bookingReference,
+      eventTitle: entry.show.event.title,
+      venueName: entry.show.venue.name,
+      venueLocation: entry.show.venue.location,
+      startTime: entry.show.startTime.toISOString(),
+      seats: [seatLabel],
+      totalPrice: seatPrice,
+      qrCodeDataUrl,
+    }).catch(() => {});
+
+    res.status(200).json({
+      message: 'Waitlist offer confirmed & ticket booked!',
+      booking: {
+        id: booking.id,
+        bookingReference,
+        totalPrice: seatPrice,
+        seats: [seatLabel],
+        qrCodeDataUrl,
+      },
+    });
+  } catch (error) {
+    console.error('[Waitlist] Confirm offer error:', error);
+    res.status(500).json({ error: { message: 'Internal server error confirming waitlist offer', status: 500 } });
   }
 };

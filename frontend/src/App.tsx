@@ -89,6 +89,67 @@ function MainContent() {
     }
   };
 
+  // ── Waitlist Active Offer Popup Banner State & Handlers ─────────────────
+  const [waitlistOffers, setWaitlistOffers] = useState<any[]>([]);
+  const [offerCountdown, setOfferCountdown] = useState<number>(300);
+  const [offerActionLoading, setOfferActionLoading] = useState<boolean>(false);
+
+  const fetchWaitlistOffers = async () => {
+    if (!user || user.role !== 'CUSTOMER') return;
+    try {
+      const res = await axios.get<{ offers: any[] }>('/api/shows/waitlist/my-offers');
+      setWaitlistOffers(res.data.offers || []);
+    } catch (e) {}
+  };
+
+  useEffect(() => {
+    fetchWaitlistOffers();
+    const interval = setInterval(fetchWaitlistOffers, 4000);
+    return () => clearInterval(interval);
+  }, [user]);
+
+  useEffect(() => {
+    if (waitlistOffers.length === 0) return;
+    const currentOffer = waitlistOffers[0];
+    const updateTime = () => {
+      const remaining = Math.max(0, Math.floor((new Date(currentOffer.offerExpiresAt).getTime() - Date.now()) / 1000));
+      setOfferCountdown(remaining);
+      if (remaining === 0) {
+        setWaitlistOffers((prev) => prev.slice(1));
+      }
+    };
+    updateTime();
+    const timer = setInterval(updateTime, 1000);
+    return () => clearInterval(timer);
+  }, [waitlistOffers]);
+
+  const handleConfirmWaitlistOffer = async (offer: any) => {
+    setOfferActionLoading(true);
+    try {
+      const res = await axios.post<{ booking: any }>(`/api/shows/waitlist/offers/${offer.waitlistEntryId}/confirm`);
+      setWaitlistOffers((prev) => prev.filter((o) => o.waitlistEntryId !== offer.waitlistEntryId));
+      setActiveTab('bookings');
+      alert(`🎉 Waitlist offer confirmed! Booking Ref: ${res.data.booking.bookingReference}. You can view your ticket & QR code under My Bookings.`);
+    } catch (err: any) {
+      alert(err.response?.data?.error?.message || 'Failed to confirm waitlist offer. It may have expired.');
+      fetchWaitlistOffers();
+    } finally {
+      setOfferActionLoading(false);
+    }
+  };
+
+  const handleCancelWaitlistOffer = async (offer: any) => {
+    setOfferActionLoading(true);
+    try {
+      await axios.post(`/api/shows/waitlist/offers/${offer.waitlistEntryId}/cancel`);
+      setWaitlistOffers((prev) => prev.filter((o) => o.waitlistEntryId !== offer.waitlistEntryId));
+    } catch (err: any) {
+      console.error('Failed to cancel waitlist offer:', err);
+    } finally {
+      setOfferActionLoading(false);
+    }
+  };
+
   const formatCountdown = (secs: number) => {
     const m = Math.floor(secs / 60);
     const s = secs % 60;
@@ -341,6 +402,47 @@ function MainContent() {
                     className="text-xs font-semibold px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded shadow-sm transition-colors disabled:opacity-50"
                   >
                     {globalConfirmLoading ? 'Confirming...' : 'Confirm Booking'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Waitlist Offer Pop-up / Banner */}
+      {waitlistOffers.length > 0 && (
+        <div className="fixed bottom-4 left-4 z-50 max-w-sm w-full bg-gradient-to-r from-indigo-900 to-indigo-950 text-white border border-indigo-500/50 rounded-xl shadow-2xl p-4 transition-all animate-bounce">
+          <div className="flex items-start gap-3">
+            <Ticket className="w-6 h-6 text-amber-400 mt-0.5 flex-shrink-0 animate-pulse" />
+            <div className="flex-1">
+              <div className="flex items-center justify-between">
+                <h4 className="font-bold text-amber-300 text-sm">🎉 Waitlist Offer Ready!</h4>
+                <span className="text-[10px] font-extrabold bg-amber-400 text-indigo-950 px-2 py-0.5 rounded shadow-sm">
+                  5 Min Offer
+                </span>
+              </div>
+              <p className="text-xs text-indigo-100 mt-1.5 leading-relaxed">
+                Queue ended! Seat <strong className="text-amber-300 font-mono text-sm">{waitlistOffers[0].seatLabel}</strong> ({waitlistOffers[0].categoryName}) for <span className="font-semibold">{waitlistOffers[0].eventTitle}</span> has been offered to you!
+              </p>
+              <div className="mt-3.5 flex items-center justify-between gap-2">
+                <span className="text-xs font-mono font-bold text-amber-300 bg-indigo-950 px-2.5 py-1 rounded border border-indigo-700">
+                  ⏳ {formatCountdown(offerCountdown)}
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleCancelWaitlistOffer(waitlistOffers[0])}
+                    disabled={offerActionLoading}
+                    className="text-xs font-semibold px-2.5 py-1 text-indigo-200 hover:bg-indigo-800/60 rounded border border-indigo-700 transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => handleConfirmWaitlistOffer(waitlistOffers[0])}
+                    disabled={offerActionLoading}
+                    className="text-xs font-bold px-3 py-1 bg-amber-400 hover:bg-amber-300 text-indigo-950 rounded shadow-md transition-all disabled:opacity-50"
+                  >
+                    {offerActionLoading ? 'Booking...' : 'Confirm Booking'}
                   </button>
                 </div>
               </div>
